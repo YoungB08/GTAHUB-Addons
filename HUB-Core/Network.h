@@ -14,13 +14,13 @@
  * | 221 | PACKET_REQUEST_DATA     | Client → Server | Client yêu cầu server resync toàn bộ data  |
  * | 222 | PACKET_SET_PRESET_ROLE  | Server → Client | Gán role cài sẵn (Admin, VIP, Mod, ...)    |
  * | 223 | PACKET_CLEAR_ROLE       | Server → Client | Xóa toàn bộ role & icon của 1 player       |
- * | 224 | PACKET_SET_ROLE_BY_NAME | Server → Client | Gán role theo tên định danh JSON (vd: ADMIN, VIP, SVG)|
+ * | 224 | PACKET_SET_ROLE_BY_NAME | Server → Client | Gán role theo tên định danh JSON (vd: ADMIN, VIP, PNG)|
  *
  * ------------------------------------------------------------
  * ## 1. PACKET_SET_ROLE_BY_NAME (ID = 224) — Server → Client
  * ------------------------------------------------------------
- * Server chỉ cần gửi Tên Role (vd: "ADMIN", "VIP") và cờ `type` (0=Text Badge, 1=SVG Icon).
- * Client tự đọc text, màu sắc, viền đen và tệp .svg từ `HUB-Roles.json`.
+ * Server chỉ cần gửi Tên Role (vd: "ADMIN", "VIP") và cờ `type` (0=Text Badge, 1=PNG Image Badge).
+ * Client tự đọc text, màu sắc, viền đen và tệp .png từ `HUB-Roles.json`.
  *
  * Cấu trúc:
  * ```
@@ -28,7 +28,7 @@
  * [1-2]     WORD    targetPlayerID  (0–1003)
  * [3]       BYTE    roleNameLen     (Độ dài tên role, vd: 5 cho "ADMIN")
  * [4..4+N)  char[]  roleName        (Chuỗi tên role, không null-terminated)
- * [4+N]     BYTE    type            (0 = Text Badge Only, 1 = Load SVG Icon từ JSON)
+ * [4+N]     BYTE    type            (0 = Text Badge Only, 1 = Load PNG Image Badge từ JSON)
  * ```
  */
 #pragma once

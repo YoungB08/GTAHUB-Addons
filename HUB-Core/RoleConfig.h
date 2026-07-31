@@ -3,7 +3,7 @@
  * @brief Đọc và quản lý tệp cấu hình HUB-Roles.json.
  *
  * Cho phép Server set role chỉ bằng tên định danh (vd: "ADMIN", "VIP", "MOD").
- * Client tự đọc text, color, stroke và tệp .png / .svg tương ứng từ HUB-Roles.json.
+ * Client tự đọc text, color, stroke và tệp .png tương ứng từ HUB-Roles.json.
  */
 #pragma once
 #ifndef WIN32_LEAN_AND_MEAN
@@ -24,7 +24,7 @@ struct RolePresetConfig {
     std::string text;
     D3DCOLOR    color     = 0;
     bool        stroke    = false;
-    std::string imagePath; // Tệp ảnh PNG / JPG / SVG
+    std::string imagePath; // Tệp ảnh PNG / JPG
     bool        hasConfig = false;
 };
 
@@ -142,10 +142,9 @@ inline RolePresetConfig GetPresetRoleConfig(const std::string& roleName) {
         }
     }
 
-    // 4. Image Path (hỗ trợ "png", "image", hoặc "svg")
+    // 4. Image Path (hỗ trợ "png" hoặc "image")
     size_t imgPos = block.find("\"png\"");
     if (imgPos == std::string::npos) imgPos = block.find("\"image\"");
-    if (imgPos == std::string::npos) imgPos = block.find("\"svg\"");
 
     if (imgPos != std::string::npos) {
         size_t v1 = block.find('"', block.find(':', imgPos));
@@ -156,15 +155,7 @@ inline RolePresetConfig GetPresetRoleConfig(const std::string& roleName) {
     }
 
     if (cfg.imagePath.empty()) {
-        std::string pngCandidate = "HUB-Core/icons/" + roleName + ".png";
-        std::string svgCandidate = "HUB-Core/icons/" + roleName + ".svg";
-        if (FileExists(pngCandidate)) {
-            cfg.imagePath = pngCandidate;
-        } else if (FileExists(svgCandidate)) {
-            cfg.imagePath = svgCandidate;
-        } else {
-            cfg.imagePath = pngCandidate;
-        }
+        cfg.imagePath = "HUB-Core/icons/" + roleName + ".png";
     }
 
     cfg.hasConfig = true;

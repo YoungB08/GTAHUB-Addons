@@ -95,7 +95,7 @@ static float DrawTag(IDirect3DDevice9* dev, float x, float y, float scale, const
 }
 
 /**
- * @brief Vẽ icon / SVG texture (tự scale theo targetW x targetH).
+ * @brief Vẽ PNG Image texture (tự scale theo targetW x targetH).
  */
 static void DrawIcon(IDirect3DDevice9* dev, float x, float y, float targetW, float targetH, const std::string& url) {
     LPDIRECT3DTEXTURE9 tex = TextureCache::GetOrLoad(dev, url);
@@ -125,7 +125,7 @@ static void DrawIcon(IDirect3DDevice9* dev, float x, float y, float targetW, flo
 static float DrawTagRow(IDirect3DDevice9* dev, float centerX, float y, float scale, const PlayerNametag& pn) {
     if (pn.tagCount == 0 && pn.iconUrl.empty()) return 0.f;
 
-    // 1. Ưu tiên vẽ SVG / Image Role Badge nếu được cấu hình iconUrl
+    // 1. Ưu tiên vẽ PNG Image Role Badge nếu được cấu hình iconUrl
     if (!pn.iconUrl.empty()) {
         LPDIRECT3DTEXTURE9 tex = TextureCache::GetOrLoad(dev, pn.iconUrl);
         if (tex) {
@@ -143,7 +143,7 @@ static float DrawTagRow(IDirect3DDevice9* dev, float centerX, float y, float sca
         }
     }
 
-    // 2. Nếu không dùng SVG -> Vẽ Text Badge bo tròn góc
+    // 2. Nếu không dùng PNG Image -> Vẽ Text Badge bo tròn góc
     ID3DXFont* font = (scale < 0.75f) ? s_FontTagSmall : s_FontTag;
 
     float tag0W = 0.f, tag1W = 0.f;

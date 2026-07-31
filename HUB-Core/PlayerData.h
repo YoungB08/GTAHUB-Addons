@@ -19,8 +19,8 @@
 /// Số player tối đa trong SAMP
 constexpr int kMaxPlayers = 1004;
 
-/// Số tag tối đa hiển thị trên một nametag (tối đa 3 roles mỗi hàng)
-constexpr int kMaxTagsPerPlayer = 3;
+/// Số tag tối đa hiển thị trên một nametag (tối đa 5 roles mỗi hàng)
+constexpr int kMaxTagsPerPlayer = 5;
 
 // ---------------------------------------------------------------------------
 

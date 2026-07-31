@@ -116,6 +116,9 @@ static void DrawIcon(IDirect3DDevice9* dev, float x, float y, float targetW, flo
 /**
  * @brief Vẽ hàng tag + icon với tỉ lệ scale theo khoảng cách (hỗ trợ tối đa 3 role mỗi hàng).
  */
+/**
+ * @brief Vẽ hàng tag + icon với tỉ lệ scale theo khoảng cách (hỗ trợ tối đa 5 role mỗi hàng).
+ */
 static float DrawTagRow(IDirect3DDevice9* dev, float centerX, float y, float scale, const PlayerNametag& pn) {
     if (pn.tagCount == 0 && pn.iconUrl.empty()) return 0.f;
 
@@ -125,14 +128,14 @@ static float DrawTagRow(IDirect3DDevice9* dev, float centerX, float y, float sca
     float badgeH  = 28.f * scale;
     float tagGap  = kTagGap * scale;
 
-    int activeTags = (pn.tagCount < 3) ? (int)pn.tagCount : 3;
+    int activeTags = (pn.tagCount < kMaxTagsPerPlayer) ? (int)pn.tagCount : kMaxTagsPerPlayer;
 
-    float tagW[3] = { 0.f, 0.f, 0.f };
-    float tagH_Render[3] = { tagH, tagH, tagH };
-    std::string tagImg[3];
+    float tagW[kMaxTagsPerPlayer] = { 0.f };
+    float tagH_Render[kMaxTagsPerPlayer] = { 0.f };
+    std::string tagImg[kMaxTagsPerPlayer];
 
     for (int t = 0; t < activeTags; t++) {
-        tagImg[t] = !pn.tags[t].imagePath.empty() ? pn.tags[t].imagePath : (t == 0 ? pn.iconUrl : "");
+        tagImg[t] = pn.tags[t].imagePath;
 
         if (!tagImg[t].empty()) {
             LPDIRECT3DTEXTURE9 tex = TextureCache::GetOrLoad(dev, tagImg[t]);

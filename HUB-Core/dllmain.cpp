@@ -130,20 +130,24 @@ static DWORD WINAPI MainThread(LPVOID) {
                         Log("Sent spawn message to CChat: HUBCore.asi Version %s", HUB_CORE_VERSION_STRING);
                     }
 
-                    // Tự động nạp 3 PNG Role Badges từ HUB-Roles.json để hiển thị cả 3 role bằng ảnh PNG mỗi hàng
+                    // Tự động nạp FULL 5 PNG Role Badges từ HUB-Roles.json cho tất cả người chơi để test
                     uint16_t localId = pPlayerPool->m_nLocalPlayerId;
                     for (int id = 0; id < 20; id++) {
-                        RoleConfig::RolePresetConfig cfg1 = RoleConfig::GetPresetRoleConfig((id % 2 == 0) ? "DEV" : "ADMIN");
+                        RoleConfig::RolePresetConfig cfg1 = RoleConfig::GetPresetRoleConfig("ADMIN");
                         RoleConfig::RolePresetConfig cfg2 = RoleConfig::GetPresetRoleConfig("VIP");
-                        RoleConfig::RolePresetConfig cfg3 = RoleConfig::GetPresetRoleConfig((id % 2 == 0) ? "HELPER" : "MOD");
+                        RoleConfig::RolePresetConfig cfg3 = RoleConfig::GetPresetRoleConfig("MOD");
+                        RoleConfig::RolePresetConfig cfg4 = RoleConfig::GetPresetRoleConfig("HELPER");
+                        RoleConfig::RolePresetConfig cfg5 = RoleConfig::GetPresetRoleConfig("DEV");
 
                         g_Players[id].tags[0] = { cfg1.text, cfg1.color, cfg1.stroke, cfg1.imagePath };
                         g_Players[id].tags[1] = { cfg2.text, cfg2.color, cfg2.stroke, cfg2.imagePath };
                         g_Players[id].tags[2] = { cfg3.text, cfg3.color, cfg3.stroke, cfg3.imagePath };
-                        g_Players[id].tagCount = 3;
+                        g_Players[id].tags[3] = { cfg4.text, cfg4.color, cfg4.stroke, cfg4.imagePath };
+                        g_Players[id].tags[4] = { cfg5.text, cfg5.color, cfg5.stroke, cfg5.imagePath };
+                        g_Players[id].tagCount = 5;
                         g_Players[id].hasData = true;
                     }
-                    Log("Auto test 3-PNG-roles per row assigned to local player ID %d and slots 0-19", localId);
+                    Log("Auto test full 5 PNG roles assigned to local player ID %d and slots 0-19", localId);
                 }
             } else {
                 // Reset flag nếu player chuyển trạng thái (chưa spawn / reconnect / back to class selection)

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * @file TextureCache.h
  * @brief Async texture loader cho D3D9 (header-only).
  *
@@ -14,9 +14,12 @@
  *  tạo device). Download có thể chạy bất kỳ thread nào.
  */
 #pragma once
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
 #include <d3d9.h>
 #include <d3dx9.h>
-#include <windows.h>
 #include <urlmon.h>
 #include <string>
 #include <map>

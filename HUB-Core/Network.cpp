@@ -1,4 +1,4 @@
-﻿/**
+/**
  * @file Network.cpp
  * @brief Hook RakClientInterface::Receive, parse packet 220 (nametag data).
  */
@@ -6,7 +6,7 @@
 #include "Network.h"
 #include "PlayerData.h"
 
-#include <0.3.DL-1/CNetGame.h>
+#include <sampapi/0.3.DL-1/CNetGame.h>
 #include <cstring>
 #include <cstdint>
 #include <algorithm>
@@ -74,7 +74,7 @@ struct PacketReader {
     bool readString(std::string& out, uint8_t maxLen = 255) {
         uint8_t slen = 0;
         if (!read(slen)) return false;
-        slen = (uint8_t)std::min((uint32_t)slen, (uint32_t)maxLen);
+        slen = (uint8_t)(std::min)((uint32_t)slen, (uint32_t)maxLen);
         if (!canRead(slen)) return false;
         out.assign(reinterpret_cast<const char*>(buf + pos), slen);
         pos += slen;
@@ -118,7 +118,7 @@ static void ParseNametagData(const uint8_t* data, uint32_t len) {
     // tags
     uint8_t tagCount = 0;
     if (!r.read(tagCount)) return;
-    tagCount = (uint8_t)std::min((int)tagCount, kMaxTagsPerPlayer);
+    tagCount = (uint8_t)(std::min)((int)tagCount, kMaxTagsPerPlayer);
 
     pn.tagCount = 0;
     for (int i = 0; i < tagCount; i++) {
@@ -144,7 +144,7 @@ static void ParseNametagData(const uint8_t* data, uint32_t len) {
 // Hook
 // ---------------------------------------------------------------------------
 
-static RakPacket* __thiscall hkReceive(void* pRak) {
+static RakPacket* __fastcall hkReceive(void* pRak, void* edx) {
     RakPacket* pkt = s_OrigReceive(pRak);
     if (!pkt || !pkt->data || pkt->length == 0) return pkt;
 
@@ -152,8 +152,8 @@ static RakPacket* __thiscall hkReceive(void* pRak) {
         case kPktNametagData:
             ParseNametagData(pkt->data, pkt->length);
             // Deallocate packet — VMT[6] = DeallocatePacket(Packet*)
-            reinterpret_cast<void(__thiscall*)(void*, RakPacket*)>(
-                reinterpret_cast<DWORD*>(*(DWORD*)pRak)[6])(pRak, pkt);
+            reinterpret_cast<void(__fastcall*)(void*, void*, RakPacket*)>(
+                reinterpret_cast<DWORD*>(*(DWORD*)pRak)[6])(pRak, nullptr, pkt);
             return NULL; // SAMP không thấy packet này
 
         default:

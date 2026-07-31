@@ -1,36 +1,35 @@
-﻿/**
+/**
  * @file Nametag.h
- * @brief Hệ thống render nametag tùy biến cho SAMP (declarations).
+ * @brief H? th?ng render nametag t�y bi?n cho SAMP (declarations).
  *
- * Kiến trúc render (từ trên xuống dưới):
+ * Ki?n tr�c render (t? tr�n xu?ng du?i):
  *
- *   ┌─────────────┬──────┬─────────────┐
- *   │  ADMIN      │ ICON │     VIP     │  ← Hàng 1: Badges
- *   └─────────────┴──────┴─────────────┘
- *          PlayerName (cyan + stroke)      ← Hàng 2: Tên
- *   ┌──────────────┐ ┌──────────────┐
- *   │ ████░░ HP   │ │ ████░░ Armour│     ← Hàng 3: Progress bars
- *   └──────────────┘ └──────────────┘
- *   ┌───────────────────────────────┐
- *   │     ID: 42   |   12ms        │     ← Hàng 4: Capsule info
- *   └───────────────────────────────┘
+ *   +----------------------------------+
+ *   �  ADMIN      � ICON �     VIP     �  ? H�ng 1: Badges
+ *   +----------------------------------+
+ *          PlayerName (cyan + stroke)      ? H�ng 2: T�n
+ *   +--------------+ +--------------+
+ *   � ������ HP   � � ������ Armour�     ? H�ng 3: Progress bars
+ *   +--------------+ +--------------+
+ *   +-------------------------------+
+ *   �     ID: 42   |   12ms        �     ? H�ng 4: Capsule info
+ *   +-------------------------------+
  *
- * Tọa độ vị trí (centerX, topY) được tính bởi W2S từ đầu player.
- * Gọi Nametag::RenderAll(device) mỗi frame từ EndScene hook.
+ * T?a d? v? tr� (centerX, topY) du?c t�nh b?i W2S t? d?u player.
+ * G?i Nametag::RenderAll(device) m?i frame t? EndScene hook.
  */
 #pragma once
 #include <d3d9.h>
-#include <d3dx9.h>
 
 namespace Nametag {
 
-/// Khởi tạo font và sprite. Gọi một lần khi D3D device sẵn sàng.
+/// Kh?i t?o font v� sprite. G?i m?t l?n khi D3D device s?n s�ng.
 void Init(IDirect3DDevice9* dev);
 
-/// Giải phóng resource. Gọi khi DLL unload hoặc device lost.
+/// Gi?i ph�ng resource. G?i khi DLL unload ho?c device lost.
 void Release();
 
-/// Vẽ toàn bộ nametag cho tất cả player trong frame hiện tại.
+/// V? to�n b? nametag cho t?t c? player trong frame hi?n t?i.
 void RenderAll(IDirect3DDevice9* dev);
 
 } // namespace Nametag

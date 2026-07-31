@@ -1,13 +1,13 @@
 /**
  * @file dllmain.cpp
- * @brief DLL entry point và các patch core.
+ * @brief DLL entry point vÃ  cÃ¡c patch core.
  *
  * Lu?ng kh?i d?ng:
  *  DLL_PROCESS_ATTACH
  *    +- MainThread (thread)
- *         +- PatchVehicleLimit()          — patch ngay khi samp.dll load
+ *         +- PatchVehicleLimit()          â€” patch ngay khi samp.dll load
  *         +- Ch? SAMP init xong (state=9 ho?c PlayerTags ready)
- *         +- D3DHook::Install()           — hook EndScene
+ *         +- D3DHook::Install()           â€” hook EndScene
  *         +- Network::Init() + RequestRoles()
  *
  *  DLL_PROCESS_DETACH
@@ -24,8 +24,8 @@
 #include "Network.h"
 #include "PlayerData.h"
 
-#include <0.3.DL-1/CNetGame.h>
-#include <0.3.DL-1/CPlayerTags.h>
+#include <sampapi/0.3.DL-1/CNetGame.h>
+#include <sampapi/0.3.DL-1/CPlayerTags.h>
 
 #pragma comment(lib, "Ws2_32.lib")
 
@@ -33,7 +33,7 @@ using namespace sampapi::v03dl;
 
 // ============================================================
 // Vehicle limit patch
-// Patch gi?i h?n 611 xe c?a SAMP lên 8000.
+// Patch gi?i h?n 611 xe c?a SAMP lÃªn 8000.
 // ============================================================
 
 static DWORD FindPattern(HMODULE hMod, const char* pattern, size_t len) {
@@ -70,25 +70,25 @@ static void PatchVehicleLimit() {
 // ============================================================
 
 static DWORD WINAPI MainThread(LPVOID) {
-    // Patch vehicle limit ngay khi samp.dll dã load
+    // Patch vehicle limit ngay khi samp.dll dÃ£ load
     PatchVehicleLimit();
 
-    // Ch? SAMP kh?i t?o xong PlayerTags (có D3D device)
+    // Ch? SAMP kh?i t?o xong PlayerTags (cÃ³ D3D device)
     while (true) {
         CPlayerTags* pTags = RefPlayerTags();
         if (pTags && pTags->m_pDevice) {
-            // Cài hook D3D
+            // CÃ i hook D3D
             if (!D3DHook::IsInstalled())
                 D3DHook::Install(pTags->m_pDevice);
 
-            // Ch? thêm d?n khi có NetGame (connected)
+            // Ch? thÃªm d?n khi cÃ³ NetGame (connected)
             CNetGame* pNet = RefNetGame();
             if (pNet && pNet->GetPlayerPool() && !Network::IsReady()) {
                 Network::Init();
-                Network::RequestData(); // yêu c?u server g?i data
+                Network::RequestData(); // yÃªu c?u server g?i data
             }
 
-            // N?u c? hai dã xong thì thoát loop
+            // N?u c? hai dÃ£ xong thÃ¬ thoÃ¡t loop
             if (D3DHook::IsInstalled() && Network::IsReady()) break;
         }
         Sleep(500);

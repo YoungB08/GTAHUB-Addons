@@ -1,4 +1,4 @@
-﻿/**
+/**
  * @file Nametag.cpp
  * @brief Render nametag động cho tất cả player mỗi frame.
  */
@@ -9,11 +9,8 @@
 #include "TextureCache.h"
 #include "PlayerData.h"
 
-#include <0.3.DL-1/CNetGame.h>
-#include <0.3.DL-1/CRemotePlayer.h>
-#include <0.3.DL-1/CPlayerPool.h>
-#include <0.3.DL-1/CPed.h>
-#include <0.3.DL-1/CPlayerTags.h>
+#include <sampapi/0.3.DL-1/CNetGame.h>
+#include <sampapi/0.3.DL-1/CPlayerTags.h>
 
 #pragma comment(lib, "d3d9.lib")
 #pragma comment(lib, "d3dx9.lib")
@@ -107,9 +104,11 @@ static void DrawIcon(IDirect3DDevice9* dev, float x, float y, const std::string&
         float scaleY = kIconSize / static_cast<float>(desc.Height);
 
         D3DXMATRIX mat;
+        D3DXVECTOR2 scale(scaleX, scaleY);
+        D3DXVECTOR2 pos(x, y);
         D3DXMatrixTransformation2D(&mat,
-            NULL, 0.f, &D3DXVECTOR2(scaleX, scaleY),
-            NULL, 0.f, &D3DXVECTOR2(x, y));
+            NULL, 0.f, &scale,
+            NULL, 0.f, &pos);
 
         s_Sprite->Begin(D3DXSPRITE_ALPHABLEND);
         s_Sprite->SetTransform(&mat);
@@ -271,7 +270,7 @@ void Nametag::RenderAll(IDirect3DDevice9* dev) {
     D3DVIEWPORT9 vp;
     dev->GetViewport(&vp);
 
-    const ID localId = pPool->m_nLocalPlayerId;
+    const sampapi::ID localId = pPool->m_nLocalPlayerId;
 
     for (int i = 0; i < kMaxPlayers; i++) {
         if (i == localId)           continue;

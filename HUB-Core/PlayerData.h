@@ -1,4 +1,4 @@
-﻿/**
+/**
  * @file PlayerData.h
  * @brief Dữ liệu nametag động của mỗi player, nhận từ server qua RakNet.
  *
@@ -19,8 +19,8 @@
 /// Số player tối đa trong SAMP
 constexpr int kMaxPlayers = 1004;
 
-/// Số tag tối đa hiển thị trên một nametag (mỗi hàng 1 tag, 2 hàng)
-constexpr int kMaxTagsPerPlayer = 2;
+/// Số tag tối đa hiển thị trên một nametag (tối đa 3 roles mỗi hàng)
+constexpr int kMaxTagsPerPlayer = 3;
 
 // ---------------------------------------------------------------------------
 

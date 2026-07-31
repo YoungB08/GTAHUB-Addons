@@ -23,28 +23,22 @@ using namespace sampapi::v03dl;
 // Layout constants
 // ---------------------------------------------------------------------------
 
-constexpr D3DCOLOR kColorName          = D3DCOLOR_ARGB(255,  51, 204, 255); ///< Cyan tên
+constexpr D3DCOLOR kColorName          = D3DCOLOR_ARGB(255, 255, 255, 255); ///< Tên màu trắng
 constexpr D3DCOLOR kColorNameStroke    = D3DCOLOR_ARGB(255,   0,   0,   0); ///< Stroke đen
-constexpr D3DCOLOR kColorTagText       = D3DCOLOR_ARGB(255, 255, 255, 255); ///< Text badge
+constexpr D3DCOLOR kColorTagText       = D3DCOLOR_ARGB(255, 255, 255, 255); ///< Text badge trắng
 constexpr D3DCOLOR kColorTagStroke     = D3DCOLOR_ARGB(255,   0,   0,   0); ///< Stroke badge
 constexpr D3DCOLOR kColorHpFill        = D3DCOLOR_ARGB(255, 210,  30,  30); ///< Đỏ HP
 constexpr D3DCOLOR kColorArmourFill    = D3DCOLOR_ARGB(255, 180, 180, 180); ///< Bạc Armour
-constexpr D3DCOLOR kColorBarBg         = D3DCOLOR_ARGB(200,   0,   0,   0); ///< Nền bar/capsule
-constexpr D3DCOLOR kColorBarBorder     = D3DCOLOR_ARGB(255,   0,   0,   0); ///< Viền bar
-constexpr D3DCOLOR kColorCapsuleBorder = D3DCOLOR_ARGB(180, 255, 255, 255); ///< Viền capsule
-constexpr D3DCOLOR kColorInfoText      = D3DCOLOR_ARGB(255,  51, 204, 255); ///< Cyan ID/ping
+constexpr D3DCOLOR kColorBarBg         = D3DCOLOR_ARGB(200,   0,   0,   0); ///< Nền bar
 
 constexpr float kGap       = 5.f;  ///< Khoảng cách dọc giữa các hàng (px)
 constexpr float kTagPadX   = 8.f;  ///< Padding ngang trong tag badge
-constexpr float kTagH      = 16.f; ///< Chiều cao cố định của tag badge
-constexpr float kTagGap    = 5.f;  ///< Khoảng cách ngang giữa 2 tag cùng hàng
-constexpr float kIconSize  = 20.f; ///< Kích thước icon (px)
-constexpr float kBarTotalW = 180.f;///< Tổng chiều rộng 2 progress bar
-constexpr float kBarH      =   9.f;///< Chiều cao progress bar
-constexpr float kCapW      = 130.f;///< Chiều rộng capsule info
-constexpr float kCapH      =  18.f;///< Chiều cao capsule info
-constexpr UINT  kBoneHead  =   8;  ///< Bone ID đầu player (GTA SA)
-constexpr float kHeadOffZ  = 0.28f;///< Offset lên trên đầu (tránh đè model)
+constexpr float kTagH      = 18.f; ///< Chiều cao cố định của tag badge
+constexpr float kTagGap    = 5.f;  ///< Khoảng cách ngang giữa các tag
+constexpr float kBarW      = 160.f;///< Chiều rộng progress bar
+constexpr float kBarH      = 9.f;  ///< Chiều cao progress bar
+constexpr UINT  kBoneHead  = 8;    ///< Bone ID đầu player (GTA SA)
+constexpr float kHeadOffZ  = 0.28f;///< Offset lên trên đầu
 
 // ---------------------------------------------------------------------------
 // D3D resources
@@ -120,59 +114,59 @@ static void DrawIcon(IDirect3DDevice9* dev, float x, float y, float targetW, flo
 }
 
 /**
- * @brief Vẽ hàng tag + icon với tỉ lệ scale theo khoảng cách.
+ * @brief Vẽ hàng tag + icon với tỉ lệ scale theo khoảng cách (hỗ trợ tối đa 3 role mỗi hàng).
  */
 static float DrawTagRow(IDirect3DDevice9* dev, float centerX, float y, float scale, const PlayerNametag& pn) {
     if (pn.tagCount == 0 && pn.iconUrl.empty()) return 0.f;
 
-    // 1. Ưu tiên vẽ PNG Image Role Badge nếu được cấu hình iconUrl
+    ID3DXFont* font = (scale < 0.75f) ? s_FontTagSmall : s_FontTag;
+    float tagPadX = kTagPadX * scale;
+    float tagH    = 20.f * scale;
+    float tagGap  = kTagGap * scale;
+
+    float iconW = 0.f, iconH = 0.f;
     if (!pn.iconUrl.empty()) {
         LPDIRECT3DTEXTURE9 tex = TextureCache::GetOrLoad(dev, pn.iconUrl);
         if (tex) {
             D3DSURFACE_DESC desc;
             tex->GetLevelDesc(0, &desc);
             if (desc.Width > 0 && desc.Height > 0) {
-                float badgeH = 22.f * scale;
+                iconH = 28.f * scale; // Tăng kích thước PNG Badge cho to rõ hơn
                 float aspect = static_cast<float>(desc.Width) / static_cast<float>(desc.Height);
-                float badgeW = badgeH * aspect;
-                float x = centerX - badgeW * 0.5f;
-
-                DrawIcon(dev, x, y, badgeW, badgeH, pn.iconUrl);
-                return badgeH;
+                iconW = iconH * aspect;
             }
         }
     }
 
-    // 2. Nếu không dùng PNG Image -> Vẽ Text Badge bo tròn góc
-    ID3DXFont* font = (scale < 0.75f) ? s_FontTagSmall : s_FontTag;
+    float tagW[3] = { 0.f, 0.f, 0.f };
+    int activeTags = (pn.tagCount < 3) ? (int)pn.tagCount : 3;
 
-    float tag0W = 0.f, tag1W = 0.f;
-    float tagPadX = kTagPadX * scale;
-    float tagH    = kTagH * scale;
-    float tagGap  = kTagGap * scale;
-
-    if (pn.tagCount >= 1) {
-        SIZE s = D3DHelper::MeasureText(font, pn.tags[0].text.c_str());
-        tag0W = static_cast<float>(s.cx) + tagPadX * 2.f;
-    }
-    if (pn.tagCount >= 2) {
-        SIZE s = D3DHelper::MeasureText(font, pn.tags[1].text.c_str());
-        tag1W = static_cast<float>(s.cx) + tagPadX * 2.f;
+    for (int t = 0; t < activeTags; t++) {
+        SIZE s = D3DHelper::MeasureText(font, pn.tags[t].text.c_str());
+        tagW[t] = static_cast<float>(s.cx) + tagPadX * 2.f;
     }
 
-    const float tag0Gap = tag0W > 0.f ? tagGap : 0.f;
-    float totalW = tag0W + tag0Gap + tag1W;
+    float totalW = 0.f;
+    if (iconW > 0.f) totalW += iconW;
+    for (int t = 0; t < activeTags; t++) {
+        if (totalW > 0.f) totalW += tagGap;
+        totalW += tagW[t];
+    }
+
     float x = centerX - totalW * 0.5f;
 
-    if (pn.tagCount >= 1) {
-        DrawTag(dev, x, y, scale, pn.tags[0]);
-        x += tag0W + tagGap;
-    }
-    if (pn.tagCount >= 2) {
-        DrawTag(dev, x, y, scale, pn.tags[1]);
+    if (iconW > 0.f) {
+        DrawIcon(dev, x, y, iconW, iconH, pn.iconUrl);
+        x += iconW + tagGap;
     }
 
-    return tagH;
+    for (int t = 0; t < activeTags; t++) {
+        float tagY = y + (iconH > tagH ? (iconH - tagH) * 0.5f : 0.f);
+        DrawTag(dev, x, tagY, scale, pn.tags[t]);
+        x += tagW[t] + tagGap;
+    }
+
+    return (iconH > tagH) ? iconH : tagH;
 }
 
 // ---------------------------------------------------------------------------
@@ -185,55 +179,47 @@ static void RenderOne(IDirect3DDevice9* dev,
     float hp, float armour,
     const PlayerNametag& pn)
 {
-    float cy        = topY;
-    float gap       = kGap * scale;
-    float barTotalW = kBarTotalW * scale;
-    float barH      = kBarH * scale;
-    float capW      = kCapW * scale;
-    float capH      = 22.f * scale; // Tăng chiều cao capsule info cho font rõ ràng hơn
+    float cy   = topY;
+    float gap  = kGap * scale;
+    float barW = kBarW * scale;
+    float barH = kBarH * scale;
 
     ID3DXFont* fontName = (scale < 0.75f) ? s_FontNameSmall : s_FontName;
-    ID3DXFont* fontInfo = (scale < 0.75f) ? s_FontInfoSmall : s_FontInfo;
 
-    // ── Hàng 1: Tags + Icon ─────────────────────────────────────────────────
+    // ── Hàng 1: Role Badges (PNG Image + up to 3 Text Badges) ────────────────
     float rowH = DrawTagRow(dev, centerX, cy, scale, pn);
     if (rowH > 0.f) cy += rowH + gap;
 
-    // ── Hàng 2: Tên (cyan + stroke 8 hướng) ─────────────────────────────────
-    SIZE nameSz = D3DHelper::MeasureText(fontName, name);
+    // ── Hàng 2: Tên & ID dạng: {name} ({id}) (Màu trắng + stroke 8 hướng) ────
+    char nameWithId[128];
+    sprintf_s(nameWithId, "%s (%d)", name, id);
+
+    SIZE nameSz = D3DHelper::MeasureText(fontName, nameWithId);
     {
         float nx = centerX - nameSz.cx * 0.5f;
         RECT r = { (LONG)nx, (LONG)cy,
                    (LONG)(nx + nameSz.cx + 2), (LONG)(cy + nameSz.cy) };
-        D3DHelper::DrawTextStroke(fontName, name, r,
+        D3DHelper::DrawTextStroke(fontName, nameWithId, r,
             DT_LEFT | DT_NOCLIP, kColorName, kColorNameStroke);
         cy += static_cast<float>(nameSz.cy) + gap;
     }
 
-    // ── Hàng 3: Progress bars (HP | Armour) bo tròn góc ─────────────────────
+    // ── Hàng 3: Progress Bar Máu (HP) bo tròn góc ───────────────────────────
     {
-        float singleW = (barTotalW - gap) * 0.5f;
-        float bx = centerX - barTotalW * 0.5f;
+        float bx = centerX - barW * 0.5f;
         float barRadius = 3.f * scale;
-        D3DHelper::DrawProgressBar(dev, bx,              cy, singleW, barH, barRadius,
-            hp,     kColorBarBg, kColorHpFill);
-        D3DHelper::DrawProgressBar(dev, bx + singleW + gap, cy, singleW, barH, barRadius,
-            armour, kColorBarBg, kColorArmourFill);
+        D3DHelper::DrawProgressBar(dev, bx, cy, barW, barH, barRadius,
+            hp, kColorBarBg, kColorHpFill);
         cy += barH + gap;
     }
 
-    // ── Hàng 4: Capsule ID | Ping bo tròn góc ────────────────────────────────
-    {
-        char info[64];
-        sprintf_s(info, "ID: %d   |   %dms", id, ping);
-        float cx2 = centerX - capW * 0.5f;
-        float capRadius = 6.f * scale;
-        D3DHelper::DrawRoundedFilledRect(dev, cx2, cy, capW, capH, capRadius, kColorBarBg);
-        D3DHelper::DrawRoundedBorderRect(dev, cx2, cy, capW, capH, capRadius, 1.f, kColorCapsuleBorder);
-        RECT r = { (LONG)cx2, (LONG)cy,
-                   (LONG)(cx2 + capW), (LONG)(cy + capH) };
-        fontInfo->DrawTextA(NULL, info, -1, &r,
-            DT_CENTER | DT_VCENTER | DT_SINGLELINE, kColorInfoText);
+    // ── Hàng 4: Progress Bar Giáp (Armour) bo tròn góc (chỉ hiện khi Armour > 0) ──
+    if (armour > 0.f) {
+        float bx = centerX - barW * 0.5f;
+        float barRadius = 3.f * scale;
+        D3DHelper::DrawProgressBar(dev, bx, cy, barW, barH, barRadius,
+            armour, kColorBarBg, kColorArmourFill);
+        cy += barH + gap;
     }
 }
 

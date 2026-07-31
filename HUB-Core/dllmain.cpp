@@ -130,27 +130,26 @@ static DWORD WINAPI MainThread(LPVOID) {
                         Log("Sent spawn message to CChat: HUBCore.asi Version %s", HUB_CORE_VERSION_STRING);
                     }
 
-                    // Tự động nạp Role Test từ HUB-Roles.json để kiểm tra ngay trong game
-                    const char* testRoleNames[] = { "ADMIN", "VIP", "MOD", "HELPER", "DEV" };
-                    int roleCount = 5;
-
+                    // Tự động nạp 3 Role Test từ HUB-Roles.json để kiểm tra 3 role mỗi hàng ngay trong game
                     uint16_t localId = pPlayerPool->m_nLocalPlayerId;
                     for (int id = 0; id < 20; id++) {
-                        const char* rName = testRoleNames[id % roleCount];
-                        RoleConfig::RolePresetConfig cfg = RoleConfig::GetPresetRoleConfig(rName);
-                        if (cfg.hasConfig) {
-                            g_Players[id].tags[0] = { cfg.text, cfg.color, cfg.stroke };
-                            g_Players[id].tagCount = 1;
-                            // Gán PNG Image Badge cho Local Player và các ID chẵn để test cả 2 dạng (Text Badge & PNG Image)
-                            if (id == localId || id % 2 == 0) {
-                                g_Players[id].iconUrl = cfg.imagePath;
-                            } else {
-                                g_Players[id].iconUrl.clear();
-                            }
-                            g_Players[id].hasData = true;
+                        RoleConfig::RolePresetConfig cfg1 = RoleConfig::GetPresetRoleConfig((id % 2 == 0) ? "ADMIN" : "DEV");
+                        RoleConfig::RolePresetConfig cfg2 = RoleConfig::GetPresetRoleConfig("VIP");
+                        RoleConfig::RolePresetConfig cfg3 = RoleConfig::GetPresetRoleConfig((id % 2 == 0) ? "MOD" : "HELPER");
+
+                        g_Players[id].tags[0] = { cfg1.text, cfg1.color, cfg1.stroke };
+                        g_Players[id].tags[1] = { cfg2.text, cfg2.color, cfg2.stroke };
+                        g_Players[id].tags[2] = { cfg3.text, cfg3.color, cfg3.stroke };
+                        g_Players[id].tagCount = 3;
+
+                        if (id == localId || id % 2 == 0) {
+                            g_Players[id].iconUrl = cfg1.imagePath;
+                        } else {
+                            g_Players[id].iconUrl.clear();
                         }
+                        g_Players[id].hasData = true;
                     }
-                    Log("Auto test roles assigned to local player ID %d and slots 0-19", localId);
+                    Log("Auto test 3-roles per row assigned to local player ID %d and slots 0-19", localId);
                 }
             } else {
                 // Reset flag nếu player chuyển trạng thái (chưa spawn / reconnect / back to class selection)

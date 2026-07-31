@@ -1,4 +1,4 @@
-# GTAHUB-Addons — HUB-Core (v1.0.4)
+# GTAHUB-Addons — HUB-Core (v1.1.0)
 
 Client-side ASI plugin cho **SA-MP 0.3.DL** / **Open.mp** viết bằng C++/Win32 & Direct3D 9.  
 Build ra `HUB-Core.asi`, tự động load qua ASI Loader khi GTA San Andreas khởi động.

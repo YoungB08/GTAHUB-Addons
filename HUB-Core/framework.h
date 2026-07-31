@@ -9,9 +9,9 @@
 #include <rpcndr.h>
 
 #define HUB_CORE_VERSION_MAJOR 1
-#define HUB_CORE_VERSION_MINOR 0
-#define HUB_CORE_VERSION_PATCH 4
-#define HUB_CORE_VERSION_STRING "1.0.4"
+#define HUB_CORE_VERSION_MINOR 1
+#define HUB_CORE_VERSION_PATCH 0
+#define HUB_CORE_VERSION_STRING "1.1.0"
 
 namespace sampapi { namespace v03dl { class CNetGame; class CChat; } }
 

@@ -236,18 +236,24 @@ static void RenderOne(IDirect3DDevice9* dev,
 // ---------------------------------------------------------------------------
 
 void Nametag::Init(IDirect3DDevice9* dev) {
-    if (s_Ready) return;
-    D3DXCreateFontA(dev, 18, 0, FW_BOLD,   1, FALSE, DEFAULT_CHARSET,
+    if (s_Ready && s_FontName && s_FontInfo && s_FontTag && s_Sprite) return;
+
+    Release();
+
+    HRESULT h1 = D3DXCreateFontA(dev, 18, 0, FW_BOLD,   1, FALSE, DEFAULT_CHARSET,
         OUT_DEFAULT_PRECIS, DEFAULT_QUALITY,
         DEFAULT_PITCH | FF_DONTCARE, "Arial", &s_FontName);
-    D3DXCreateFontA(dev, 11, 0, FW_NORMAL, 1, FALSE, DEFAULT_CHARSET,
+    HRESULT h2 = D3DXCreateFontA(dev, 11, 0, FW_NORMAL, 1, FALSE, DEFAULT_CHARSET,
         OUT_DEFAULT_PRECIS, DEFAULT_QUALITY,
         DEFAULT_PITCH | FF_DONTCARE, "Arial", &s_FontInfo);
-    D3DXCreateFontA(dev, 10, 0, FW_BOLD,   1, FALSE, DEFAULT_CHARSET,
+    HRESULT h3 = D3DXCreateFontA(dev, 10, 0, FW_BOLD,   1, FALSE, DEFAULT_CHARSET,
         OUT_DEFAULT_PRECIS, DEFAULT_QUALITY,
         DEFAULT_PITCH | FF_DONTCARE, "Arial", &s_FontTag);
-    D3DXCreateSprite(dev, &s_Sprite);
-    s_Ready = true;
+    HRESULT h4 = D3DXCreateSprite(dev, &s_Sprite);
+
+    s_Ready = (SUCCEEDED(h1) && SUCCEEDED(h2) && SUCCEEDED(h3) && SUCCEEDED(h4));
+    Log("Nametag::Init result: s_Ready=%d (h1=%X, h2=%X, h3=%X, h4=%X)",
+        (int)s_Ready, (unsigned int)h1, (unsigned int)h2, (unsigned int)h3, (unsigned int)h4);
 }
 
 void Nametag::Release() {
@@ -260,28 +266,91 @@ void Nametag::Release() {
 }
 
 void Nametag::RenderAll(IDirect3DDevice9* dev) {
-    if (!s_Ready) return;
+    CNetGame* pNet = GetRefNetGame();
+    if (pNet) {
+        pNet->m_bNametagStatus = false;
+        if (pNet->m_pSettings) {
+            pNet->m_pSettings->m_bNameTags = false;
+            pNet->m_pSettings->m_fNameTagsDrawDist = 0.0f;
+        }
+    }
 
-    CNetGame*    pNet  = RefNetGame();           if (!pNet)  return;
-    CPlayerPool* pPool = pNet->GetPlayerPool();  if (!pPool) return;
+    if (!s_Ready) return;
+    if (!pNet) return;
+    CPlayerPool* pPool = pNet->GetPlayerPool(); if (!pPool) return;
 
     TextureCache::FlushPending(dev); // tạo texture từ file đã download (render thread)
 
     D3DVIEWPORT9 vp;
     dev->GetViewport(&vp);
 
+    SAMPVersionInfo vInfo = SAMPVersionInfo::Get();
     const sampapi::ID localId = pPool->m_nLocalPlayerId;
 
     for (int i = 0; i < kMaxPlayers; i++) {
-        if (i == localId)           continue;
-        if (!pPool->IsConnected(i)) continue;
+        void* pGamePed = nullptr;
+        const char* name = nullptr;
+        float hp = 100.f;
+        float armour = 0.f;
+        int ping = 0;
 
-        CRemotePlayer* pPlayer = pPool->GetPlayer(i);
-        if (!pPlayer || !pPlayer->m_pPed) continue;
+        if (i == localId) {
+            auto ppPed = reinterpret_cast<void**>(0xB7CD98);
+            if (ppPed && !IsBadReadPtr(ppPed, sizeof(void*)) && *ppPed && !IsBadReadPtr(*ppPed, 0x600)) {
+                pGamePed = *ppPed;
+            }
+            if (vInfo.fnGetLocalPlayerName)
+                name = reinterpret_cast<const char*(__thiscall*)(void*)>(vInfo.fnGetLocalPlayerName)(pPool);
+            if (vInfo.fnGetLocalPlayerPing)
+                ping = reinterpret_cast<int(__thiscall*)(void*)>(vInfo.fnGetLocalPlayerPing)(pPool);
+        } else {
+            if (!pPool->IsConnected(i)) continue;
+            CRemotePlayer* pPlayer = pPool->GetPlayer(i);
+            if (!pPlayer || IsBadReadPtr(pPlayer, sizeof(void*))) continue;
 
-        // Lấy vị trí đầu player → project lên màn hình
-        sampapi::CVector headPos;
-        pPlayer->m_pPed->GetBonePosition(kBoneHead, &headPos);
+            // Tắt nametag mặc định của SAMP trên CRemotePlayer object
+            pPlayer->m_bDrawLabels = FALSE;
+
+            if (pPlayer->m_pPed && !IsBadReadPtr(pPlayer->m_pPed, sizeof(void*))) {
+                pGamePed = pPlayer->m_pPed->m_pGamePed;
+            }
+
+            if (vInfo.fnGetName)
+                name = reinterpret_cast<const char*(__thiscall*)(void*, int)>(vInfo.fnGetName)(pPool, i);
+            if (vInfo.fnGetPing)
+                ping = reinterpret_cast<int(__thiscall*)(void*, int)>(vInfo.fnGetPing)(pPool, i);
+        }
+
+        if (!pGamePed || IsBadReadPtr(pGamePed, 0x600)) continue;
+
+        // Lấy máu/giáp trực tiếp từ GTA SA CPed struct (0x540=Health, 0x548=Armour)
+        hp = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(pGamePed) + 0x540);
+        armour = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(pGamePed) + 0x548);
+
+        // Lấy vị trí đầu player
+        sampapi::CVector headPos{0.f, 0.f, 0.f};
+        bool boneSuccess = false;
+
+        // 1. Thử dùng CPed::GetBonePosition (0x5E4280)
+        reinterpret_cast<void(__thiscall*)(void*, sampapi::CVector*, int, bool)>(0x5E4280)(
+            pGamePed, &headPos, kBoneHead, true);
+        if (headPos.z > 0.1f) {
+            boneSuccess = true;
+        }
+
+        // 2. Fallback: Lấy vị trí từ Matrix của CPed nếu GetBonePosition không trả kết quả
+        if (!boneSuccess) {
+            uintptr_t transform = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(pGamePed) + 0x14);
+            if (transform && !IsBadReadPtr(reinterpret_cast<void*>(transform), 0x40)) {
+                headPos.x = *reinterpret_cast<float*>(transform + 0x30);
+                headPos.y = *reinterpret_cast<float*>(transform + 0x34);
+                headPos.z = *reinterpret_cast<float*>(transform + 0x38) + 0.8f;
+            } else {
+                headPos.x = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(pGamePed) + 0x4);
+                headPos.y = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(pGamePed) + 0x8);
+                headPos.z = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(pGamePed) + 0xC) + 0.8f;
+            }
+        }
         headPos.z += kHeadOffZ;
 
         float sx, sy;
@@ -289,12 +358,65 @@ void Nametag::RenderAll(IDirect3DDevice9* dev) {
         if (sx < 0.f || sx > (float)vp.Width)  continue;
         if (sy < 0.f || sy > (float)vp.Height) continue;
 
-        const char* name   = pPool->GetName(i);
-        float hp     = max(0.f, min(100.f, pPlayer->m_fReportedHealth));
-        float armour = max(0.f, min(100.f, pPlayer->m_fReportedArmour));
-        int   ping   = pPool->GetPing(i);
+        if (!name || strlen(name) == 0) name = "Player";
+        hp = (std::max)(0.f, (std::min)(100.f, hp));
+        armour = (std::max)(0.f, (std::min)(100.f, armour));
 
-        RenderOne(dev, sx, sy, name ? name : "?",
-            i, ping, hp, armour, g_Players[i]);
+        static int renderOneLog = 0;
+        if (renderOneLog < 10) {
+            renderOneLog++;
+            Log("Rendering Nametag for player %d (%s) at (%.1f, %.1f) HP=%.0f Arm=%.0f",
+                i, name, sx, sy, hp, armour);
+        }
+
+        RenderOne(dev, sx, sy, name, i, ping, hp, armour, g_Players[i]);
+    }
+
+    // Render CActorPool (Actors)
+    if (pNet->GetActorPool()) {
+        CActorPool* pActorPool = pNet->GetActorPool();
+        if (!IsBadReadPtr(pActorPool, sizeof(void*))) {
+            for (int a = 0; a < CActorPool::MAX_ACTORS; a++) {
+                if (!pActorPool->m_bNotEmpty[a]) continue;
+                void* pGamePed = pActorPool->m_pGameObject[a];
+                if (!pGamePed || IsBadReadPtr(pGamePed, 0x600)) continue;
+
+                float hp = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(pGamePed) + 0x540);
+                float armour = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(pGamePed) + 0x548);
+
+                sampapi::CVector headPos{0.f, 0.f, 0.f};
+                bool boneSuccess = false;
+                reinterpret_cast<void(__thiscall*)(void*, sampapi::CVector*, int, bool)>(0x5E4280)(
+                    pGamePed, &headPos, kBoneHead, true);
+                if (headPos.z > 0.1f) boneSuccess = true;
+
+                if (!boneSuccess) {
+                    uintptr_t transform = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(pGamePed) + 0x14);
+                    if (transform && !IsBadReadPtr(reinterpret_cast<void*>(transform), 0x40)) {
+                        headPos.x = *reinterpret_cast<float*>(transform + 0x30);
+                        headPos.y = *reinterpret_cast<float*>(transform + 0x34);
+                        headPos.z = *reinterpret_cast<float*>(transform + 0x38) + 0.8f;
+                    } else {
+                        headPos.x = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(pGamePed) + 0x4);
+                        headPos.y = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(pGamePed) + 0x8);
+                        headPos.z = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(pGamePed) + 0xC) + 0.8f;
+                    }
+                }
+                headPos.z += kHeadOffZ;
+
+                float sx, sy;
+                if (!W2S::ToScreen(headPos, sx, sy)) continue;
+                if (sx < 0.f || sx > (float)vp.Width)  continue;
+                if (sy < 0.f || sy > (float)vp.Height) continue;
+
+                char actorName[32];
+                sprintf_s(actorName, "Actor %d", a);
+                hp = (std::max)(0.f, (std::min)(100.f, hp));
+                armour = (std::max)(0.f, (std::min)(100.f, armour));
+
+                PlayerNametag dummyPn{};
+                RenderOne(dev, sx, sy, actorName, a, 0, hp, armour, dummyPn);
+            }
+        }
     }
 }

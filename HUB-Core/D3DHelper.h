@@ -1,4 +1,4 @@
-﻿/**
+/**
  * @file D3DHelper.h
  * @brief Primitive 2D drawing utilities cho D3D9 (header-only).
  *
@@ -44,8 +44,20 @@ inline void DrawFilledRect(IDirect3DDevice9* dev,
         { x + w, y + h, 0.f, 1.f, color },
         { x + w, y,     0.f, 1.f, color },
     };
+    dev->SetTexture(0, NULL);
+    dev->SetTextureStageState(0, D3DTSS_COLOROP,   D3DTOP_SELECTARG1);
+    dev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+    dev->SetTextureStageState(0, D3DTSS_ALPHAOP,   D3DTOP_SELECTARG1);
+    dev->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
     dev->SetFVF(kFVF);
     dev->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, v, sizeof(Vertex2D));
+
+    dev->SetTextureStageState(0, D3DTSS_COLOROP,   D3DTOP_MODULATE);
+    dev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+    dev->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
+    dev->SetTextureStageState(0, D3DTSS_ALPHAOP,   D3DTOP_MODULATE);
+    dev->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TEXTURE);
+    dev->SetTextureStageState(0, D3DTSS_ALPHAARG2, D3DTA_DIFFUSE);
 }
 
 /**

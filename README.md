@@ -1,4 +1,4 @@
-﻿# GTAHUB-Addons — HUB-Core
+# GTAHUB-Addons — HUB-Core
 
 Client-side ASI plugin cho **SA-MP 0.3.DL** viết bằng C++/Win32.  
 Build ra `rcgame.asi`, load tự động qjua ASI Loader khi GTA SA khởi động.
@@ -140,7 +140,7 @@ public OnPlayerConnect(playerid) {
 | Configuration | Output | Ghi chú |
 |---|---|---|
 | Debug\|Win32 | `.asi` | Thư mục build mặc định |
-| Release\|Win32 | `D:\RCRP Game\rcgame.asi` | Auto-deploy vào GTA SA folder |
+| Release\|Win32 | `D:\GTA-Hub\GTA SAN ANDREAS\rcgame.asi` | Auto-deploy vào GTA SA folder |
 
 **Build:**
 ```
@@ -171,4 +171,17 @@ Mở HUB-Core.sln → chọn Release|Win32 → Ctrl+Shift+B
 | `d3dx9.lib` | D3DXFont, D3DXSprite, D3DXCreateTexture |
 | `urlmon.lib` | URLDownloadToCacheFileA |
 | `Ws2_32.lib` | Winsock (RakNet dependency) |
+
+---
+
+## Update Changelog (Version 1.0.4)
+
+### 🚀 High-Performance D3D9 Engine & Crash Fixes
+- **Multi-Device Map Hooking**: Resolved multi-device pointer overwrites during Open.mp startup by maintaining per-device `std::unordered_map` function lookups for `Present` (VMT 17) and `EndScene` (VMT 42).
+- **Fastman92 & ENB Compatibility**: Replaced instruction-patching trampoline with clean VMT chaining, eliminating `0xC0000005` ACCESS_VIOLATION crashes when running alongside Fastman92 Limit Adjuster 7.6.
+- **Zero-Leak Render State Preservation**: Integrated 8-DWORD state backup and restoration (`SaveState`/`RestoreState`) capturing `Texture(0)`, `FVF`, Z-buffer, AlphaBlend, Fog, and Scissor states to prevent 3D terrain texture smearing and white ground rendering.
+- **Continuous Device Monitoring**: `MainThread` dynamically tracks `0xC97C28` (`RwD3D9Device`) to automatically hook newly created Direct3D devices as GTA SA transitions from loading screens into the world.
+- **Safe Native Nametag Hiding**: Applied native `pPlayer->m_bDrawLabels = FALSE` per `CRemotePlayer` to suppress default SA-MP/Open.mp nametags cleanly.
+- **CActorPool & Remote Player Support**: Fixed player loop condition checks and added full rendering support for `CActorPool` actors and `CPlayerPool` remote players.
+- **Cooperative Level Protection**: Guarded render loops with `dev->TestCooperativeLevel()` to handle device reset during resolution changes and alt-tabbing without crashing.
 

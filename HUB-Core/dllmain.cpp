@@ -70,26 +70,29 @@ static void PatchVehicleLimit() {
 // ============================================================
 
 static DWORD WINAPI MainThread(LPVOID) {
-    // Patch vehicle limit ngay khi samp.dll dã load
-    PatchVehicleLimit();
+    Log("MainThread started.");
 
-    // Ch? SAMP kh?i t?o xong PlayerTags (có D3D device)
+    int loopCount = 0;
     while (true) {
-        CPlayerTags* pTags = RefPlayerTags();
-        if (pTags && pTags->m_pDevice) {
-            // Cài hook D3D
-            if (!D3DHook::IsInstalled())
-                D3DHook::Install(pTags->m_pDevice);
+        loopCount++;
+        auto ppDev = reinterpret_cast<IDirect3DDevice9**>(0xC97C28);
+        IDirect3DDevice9* dev = (ppDev && !IsBadReadPtr(ppDev, sizeof(void*)) && *ppDev && !IsBadReadPtr(*ppDev, sizeof(void*))) ? *ppDev : nullptr;
 
-            // Ch? thêm d?n khi có NetGame (connected)
-            CNetGame* pNet = RefNetGame();
+        if (dev) {
+            // Cài/Cập nhật hook D3D bất cứ khi nào device thay đổi
+            D3DHook::Install(dev);
+
+            // Chờ có NetGame (connected)
+            CNetGame* pNet = GetRefNetGame();
             if (pNet && pNet->GetPlayerPool() && !Network::IsReady()) {
+                Log("MainThread: Init Network with pNet %p", pNet);
                 Network::Init();
-                Network::RequestData(); // yêu c?u server g?i data
+                Network::RequestData(); // yêu cầu server gửi data
             }
-
-            // N?u c? hai dã xong thì thoát loop
-            if (D3DHook::IsInstalled() && Network::IsReady()) break;
+        }
+        if (loopCount % 20 == 0) {
+            Log("MainThread loop %d: dev=%p, D3DHookInstalled=%d, NetworkReady=%d",
+                loopCount, dev, (int)D3DHook::IsInstalled(), (int)Network::IsReady());
         }
         Sleep(500);
     }
@@ -104,11 +107,13 @@ static DWORD WINAPI MainThread(LPVOID) {
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID) {
     switch (reason) {
     case DLL_PROCESS_ATTACH:
+        Log("=== HUB-Core.asi DLL_PROCESS_ATTACH ===");
         DisableThreadLibraryCalls(hModule);
         CreateThread(nullptr, 0, MainThread, nullptr, 0, nullptr);
         break;
 
     case DLL_PROCESS_DETACH:
+        Log("=== HUB-Core.asi DLL_PROCESS_DETACH ===");
         D3DHook::Uninstall();
         Network::Shutdown();
         Nametag::Release();

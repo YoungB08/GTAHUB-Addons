@@ -162,11 +162,9 @@ static void ParsePresetRole(const uint8_t* data, uint32_t len) {
     if (!roleName.empty()) {
         RoleConfig::RolePresetConfig cfg = RoleConfig::GetPresetRoleConfig(roleName);
         if (cfg.hasConfig) {
-            pn.tags[0] = { cfg.text, cfg.color, cfg.stroke };
+            std::string img = (useImage != 0) ? cfg.imagePath : "";
+            pn.tags[0] = { cfg.text, cfg.color, cfg.stroke, img };
             pn.tagCount = 1;
-            if (useImage != 0 && !cfg.imagePath.empty()) {
-                pn.iconUrl = cfg.imagePath;
-            }
         }
     }
 
@@ -196,18 +194,13 @@ static void ParseRoleByName(const uint8_t* data, uint32_t len) {
 
     RoleConfig::RolePresetConfig cfg = RoleConfig::GetPresetRoleConfig(roleName);
     if (cfg.hasConfig) {
-        pn.tags[0] = { cfg.text, cfg.color, cfg.stroke };
+        std::string img = (useImage != 0) ? cfg.imagePath : "";
+        pn.tags[0] = { cfg.text, cfg.color, cfg.stroke, img };
         pn.tagCount = 1;
-
-        if (useImage != 0 && !cfg.imagePath.empty()) {
-            pn.iconUrl = cfg.imagePath;
-        }
     } else {
-        pn.tags[0] = { roleName, D3DCOLOR_ARGB(255, 200, 200, 200), false };
+        std::string img = (useImage != 0) ? ("HUB-Core/icons/" + roleName + ".png") : "";
+        pn.tags[0] = { roleName, D3DCOLOR_ARGB(255, 200, 200, 200), false, img };
         pn.tagCount = 1;
-        if (useImage != 0) {
-            pn.iconUrl = "HUB-Core/icons/" + roleName + ".png";
-        }
     }
 
     pn.hasData = true;

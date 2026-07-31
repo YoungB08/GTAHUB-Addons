@@ -35,6 +35,7 @@ struct RoleTag {
     std::string text;           ///< Nội dung badge (vd: "ADMIN", "VIP", "MOD")
     D3DCOLOR    color  = 0;     ///< Màu nền badge dạng ARGB (0xAARRGGBB)
     bool        stroke = false; ///< true = vẽ viền đen 8 hướng quanh text
+    std::string imagePath;      ///< Tệp ảnh PNG / JPG của Role (vd: "HUB-Core/icons/admin.png")
 };
 
 /**

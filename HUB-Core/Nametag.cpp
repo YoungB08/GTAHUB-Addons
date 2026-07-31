@@ -122,51 +122,59 @@ static float DrawTagRow(IDirect3DDevice9* dev, float centerX, float y, float sca
     ID3DXFont* font = (scale < 0.75f) ? s_FontTagSmall : s_FontTag;
     float tagPadX = kTagPadX * scale;
     float tagH    = 20.f * scale;
+    float badgeH  = 28.f * scale;
     float tagGap  = kTagGap * scale;
 
-    float iconW = 0.f, iconH = 0.f;
-    if (!pn.iconUrl.empty()) {
-        LPDIRECT3DTEXTURE9 tex = TextureCache::GetOrLoad(dev, pn.iconUrl);
-        if (tex) {
-            D3DSURFACE_DESC desc;
-            tex->GetLevelDesc(0, &desc);
-            if (desc.Width > 0 && desc.Height > 0) {
-                iconH = 28.f * scale; // Tăng kích thước PNG Badge cho to rõ hơn
-                float aspect = static_cast<float>(desc.Width) / static_cast<float>(desc.Height);
-                iconW = iconH * aspect;
+    int activeTags = (pn.tagCount < 3) ? (int)pn.tagCount : 3;
+
+    float tagW[3] = { 0.f, 0.f, 0.f };
+    float tagH_Render[3] = { tagH, tagH, tagH };
+    std::string tagImg[3];
+
+    for (int t = 0; t < activeTags; t++) {
+        tagImg[t] = !pn.tags[t].imagePath.empty() ? pn.tags[t].imagePath : (t == 0 ? pn.iconUrl : "");
+
+        if (!tagImg[t].empty()) {
+            LPDIRECT3DTEXTURE9 tex = TextureCache::GetOrLoad(dev, tagImg[t]);
+            if (tex) {
+                D3DSURFACE_DESC desc;
+                tex->GetLevelDesc(0, &desc);
+                if (desc.Width > 0 && desc.Height > 0) {
+                    float aspect = static_cast<float>(desc.Width) / static_cast<float>(desc.Height);
+                    tagW[t] = badgeH * aspect;
+                    tagH_Render[t] = badgeH;
+                }
             }
+        }
+
+        if (tagW[t] <= 0.f) {
+            SIZE s = D3DHelper::MeasureText(font, pn.tags[t].text.c_str());
+            tagW[t] = static_cast<float>(s.cx) + tagPadX * 2.f;
+            tagH_Render[t] = tagH;
         }
     }
 
-    float tagW[3] = { 0.f, 0.f, 0.f };
-    int activeTags = (pn.tagCount < 3) ? (int)pn.tagCount : 3;
-
-    for (int t = 0; t < activeTags; t++) {
-        SIZE s = D3DHelper::MeasureText(font, pn.tags[t].text.c_str());
-        tagW[t] = static_cast<float>(s.cx) + tagPadX * 2.f;
-    }
-
     float totalW = 0.f;
-    if (iconW > 0.f) totalW += iconW;
     for (int t = 0; t < activeTags; t++) {
-        if (totalW > 0.f) totalW += tagGap;
+        if (t > 0) totalW += tagGap;
         totalW += tagW[t];
     }
 
     float x = centerX - totalW * 0.5f;
-
-    if (iconW > 0.f) {
-        DrawIcon(dev, x, y, iconW, iconH, pn.iconUrl);
-        x += iconW + tagGap;
-    }
+    float maxRowH = tagH;
 
     for (int t = 0; t < activeTags; t++) {
-        float tagY = y + (iconH > tagH ? (iconH - tagH) * 0.5f : 0.f);
-        DrawTag(dev, x, tagY, scale, pn.tags[t]);
+        if (tagH_Render[t] == badgeH && !tagImg[t].empty()) {
+            DrawIcon(dev, x, y, tagW[t], badgeH, tagImg[t]);
+            if (badgeH > maxRowH) maxRowH = badgeH;
+        } else {
+            float tagY = y + (maxRowH > tagH ? (maxRowH - tagH) * 0.5f : 0.f);
+            DrawTag(dev, x, tagY, scale, pn.tags[t]);
+        }
         x += tagW[t] + tagGap;
     }
 
-    return (iconH > tagH) ? iconH : tagH;
+    return maxRowH;
 }
 
 // ---------------------------------------------------------------------------

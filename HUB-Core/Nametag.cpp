@@ -31,14 +31,14 @@ constexpr D3DCOLOR kColorHpFill        = D3DCOLOR_ARGB(255, 210,  30,  30); ///<
 constexpr D3DCOLOR kColorArmourFill    = D3DCOLOR_ARGB(255, 180, 180, 180); ///< Bạc Armour
 constexpr D3DCOLOR kColorBarBg         = D3DCOLOR_ARGB(200,   0,   0,   0); ///< Nền bar
 
-constexpr float kGap       = 5.f;  ///< Khoảng cách dọc giữa các hàng (px)
+constexpr float kGap       = 6.f;  ///< Khoảng cách dọc giữa các hàng (px)
 constexpr float kTagPadX   = 8.f;  ///< Padding ngang trong tag badge
 constexpr float kTagH      = 18.f; ///< Chiều cao cố định của tag badge
 constexpr float kTagGap    = 5.f;  ///< Khoảng cách ngang giữa các tag
 constexpr float kBarW      = 160.f;///< Chiều rộng progress bar
 constexpr float kBarH      = 9.f;  ///< Chiều cao progress bar
 constexpr UINT  kBoneHead  = 8;    ///< Bone ID đầu player (GTA SA)
-constexpr float kHeadOffZ  = 0.28f;///< Offset lên trên đầu
+constexpr float kHeadOffZ  = 0.55f;///< Offset Z lên trên đầu (tăng khoảng cách tránh dính đầu)
 
 // ---------------------------------------------------------------------------
 // D3D resources

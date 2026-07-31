@@ -66,18 +66,24 @@ rồi chiếu qua `CalcScreenCoors` (`gta_sa.exe+0x71DA00`).
 
 | ID | Hướng | Mô tả |
 |---|---|---|
-| `220` | Server → Client | Push role data của 1 player |
-| `221` | Client → Server | Yêu cầu sync toàn bộ role data |
+| `220` | Server → Client | Toàn bộ nametag data (icon + tags) của 1 player |
+| `221` | Client → Server | Client yêu cầu server resync data |
 
-### Cấu trúc Packet 220 — `PACKET_PLAYER_ROLE`
+### Cấu trúc Packet 220 — `PACKET_NAMETAG_DATA`
 
 | Offset | Size | Type | Mô tả |
 |---|---|---|---|
 | 0 | 1 | `BYTE` | Packet ID = `220` |
-| 1 | 2 | `WORD` | PlayerID (0–1003) |
-| 3 | 1 | `BYTE` | flags: `bit0`=isAdmin, `bit1`=isVIP |
-| 4 | 1 | `BYTE` | iconUrlLen (0 = không có icon) |
-| 5 | N | `char[]` | iconUrl (không null-terminated) |
+| 1 | 2 | `WORD` | targetPlayerID (0–1003) |
+| 3 | 1 | `BYTE` | iconUrlLen (0 = không có icon) |
+| 4 | N | `char[]` | iconUrl (không null-terminated) |
+| 4+N | 1 | `BYTE` | tagCount (0–2, tối đa 2 tag) |
+| per tag | 1 | `BYTE` | textLen |
+| per tag | M | `char[]` | text badge (không null-terminated) |
+| per tag | 4 | `DWORD` | colorARGB (D3DCOLOR `0xAARRGGBB`) |
+| per tag | 1 | `BYTE` | stroke (`0`=tắt, `1`=bật) |
+
+> **Pawn color**: Pawn dùng `0xRRGGBBAA`, plugin C++ phải đổi sang `0xAARRGGBB` trước khi gửi.
 
 ### Cấu trúc Packet 221 — `PACKET_REQUEST_ROLES`
 
@@ -165,3 +171,4 @@ Mở HUB-Core.sln → chọn Release|Win32 → Ctrl+Shift+B
 | `d3dx9.lib` | D3DXFont, D3DXSprite, D3DXCreateTexture |
 | `urlmon.lib` | URLDownloadToCacheFileA |
 | `Ws2_32.lib` | Winsock (RakNet dependency) |
+

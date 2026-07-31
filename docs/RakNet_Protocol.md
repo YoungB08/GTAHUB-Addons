@@ -8,7 +8,7 @@ Tài liệu này mô tả chi tiết giao thức truyền nhận dữ liệu cus
 
 | Packet ID | Tên Packet | Hướng | Mô Tả |
 |:---:|---|:---:|---|
-| **224** | `PACKET_SET_ROLE_BY_NAME` | Server → Client | **Khuyên dùng**: Server chỉ gửi Tên Role (vd: "ADMIN") + Cờ SVG (Client tự nạp JSON) |
+| **224** | `PACKET_SET_ROLE_BY_NAME` | Server → Client | **Khuyên dùng**: Server chỉ gửi Tên Role (vd: "ADMIN") + Cờ PNG (Client tự nạp từ JSON) |
 | **220** | `PACKET_NAMETAG_DATA` | Server → Client | Gửi Custom Role (Text tùy chỉnh, màu tùy chỉnh, stroke) hoặc Image-Only Role (Chỉ Icon) |
 | **221** | `PACKET_REQUEST_DATA` | Client → Server | Client gửi khi vừa đăng nhập/reconnect để yêu cầu Server gửi lại Role Data |
 | **222** | `PACKET_SET_PRESET_ROLE` | Server → Client | Gán nhanh các Role cài sẵn (Admin, VIP, Moderator, Helper, Developer) |
@@ -19,7 +19,7 @@ Tài liệu này mô tả chi tiết giao thức truyền nhận dữ liệu cus
 ## 2. Chi Tiết Cấu Trúc Packet
 
 ### 🔹 Packet 224: `PACKET_SET_ROLE_BY_NAME` (Server → Client) — KHUYÊN DÙNG
-Server chỉ cần truyền **Tên Role** (vd: `"ADMIN"`, `"VIP"`, `"MOD"`) và **cờ useSvg** (`0`=Chỉ dùng Text Badge, `1`=Hiển thị Icon SVG từ JSON). Client tự động đối chiếu `HUB-Core/HUB-Roles.json` để lấy màu sắc, text, stroke và icon SVG.
+Server chỉ cần truyền **Tên Role** (vd: `"ADMIN"`, `"VIP"`, `"MOD"`) và **cờ useImage** (`0`=Chỉ dùng Text Badge, `1`=Hiển thị Icon PNG từ JSON). Client tự động đối chiếu `HUB-Core/HUB-Roles.json` để lấy màu sắc, text, stroke và tệp PNG.
 
 | Offset | Kích thước | Kiểu dữ liệu | Mô tả |
 |:---:|:---:|:---:|---|
@@ -27,7 +27,7 @@ Server chỉ cần truyền **Tên Role** (vd: `"ADMIN"`, `"VIP"`, `"MOD"`) và 
 | `1` | 2 bytes | `WORD` | `targetPlayerID` (0 - 1003) |
 | `3` | 1 byte | `BYTE` | `roleNameLen` (Độ dài chuỗi tên Role) |
 | `4` | N bytes | `char[]` | `roleName` (Chuỗi tên Role, vd: "ADMIN", "VIP") |
-| `4+N` | 1 byte | `BYTE` | `useSvg` (`0` = Text Badge Only, `1` = Nạp SVG Icon từ JSON) |
+| `4+N` | 1 byte | `BYTE` | `useImage` (`0` = Text Badge Only, `1` = Nạp PNG Icon từ JSON) |
 
 ---
 
@@ -56,7 +56,7 @@ Gán nhanh Role tiêu chuẩn hệ thống.
 | `0` | 1 byte | `BYTE` | Packet ID = `222` |
 | `1` | 2 bytes | `WORD` | `targetPlayerID` (0 - 1003) |
 | `3` | 1 byte | `BYTE` | `presetRoleType` (1=ADMIN, 2=VIP, 3=MOD, 4=HELPER, 5=DEV) |
-| `4` | 1 byte | `BYTE` | `useSvg` (`0` = Text Badge Only, `1` = Nạp SVG Icon từ JSON) |
+| `4` | 1 byte | `BYTE` | `useImage` (`0` = Text Badge Only, `1` = Nạp PNG Icon từ JSON) |
 
 ---
 
@@ -82,8 +82,8 @@ Gửi từ Client lên Server khi vừa vào game để yêu cầu Server đồn
 ## 3. Mã Nguồn Mẫu Phía Server (C++ Server Plugin)
 
 ```cpp
-// Gửi Packet 224: Set Role bằng Tên (Ví dụ "ADMIN", useSvg = 1)
-void Server_SetRoleByName(RakServerInterface* pRak, int toPlayer, int targetPlayer, const char* roleName, bool useSvg) {
+// Gửi Packet 224: Set Role bằng Tên (Ví dụ "ADMIN", useImage = 1)
+void Server_SetRoleByName(RakServerInterface* pRak, int toPlayer, int targetPlayer, const char* roleName, bool useImage) {
     uint8_t buf[64];
     int pos = 0;
 
@@ -94,7 +94,7 @@ void Server_SetRoleByName(RakServerInterface* pRak, int toPlayer, int targetPlay
     buf[pos++] = len;
     memcpy(&buf[pos], roleName, len); pos += len;
     
-    buf[pos++] = useSvg ? 1 : 0;
+    buf[pos++] = useImage ? 1 : 0;
 
     PlayerID pid = pRak->GetPlayerIDFromIndex(toPlayer);
     pRak->Send((char*)buf, pos, HIGH_PRIORITY, RELIABLE_ORDERED, 0, pid, false);
@@ -111,11 +111,11 @@ void Server_SetRoleByName(RakServerInterface* pRak, int toPlayer, int targetPlay
 #endif
 #define _hubcore_included
 
-native SetPlayerRoleByName(toPlayerid, targetPlayerid, const roleName[], useSvg);
+native SetPlayerRoleByName(toPlayerid, targetPlayerid, const roleName[], useImage);
 
 public OnPlayerSpawn(playerid)
 {
-    // Set Role ADMIN kèm SVG Icon
+    // Set Role ADMIN kèm PNG Image Badge
     if (IsPlayerAdmin(playerid)) {
         SetPlayerRoleByName(-1, playerid, "ADMIN", 1);
     }
@@ -131,25 +131,26 @@ public OnPlayerSpawn(playerid)
 
 ## 5. Cơ Chế Nạp Icon Cục Bộ (`HUB-Core/HUB-Roles.json`)
 
-Nhằm tối ưu hiệu năng và tiết kiệm băng thông, Client `HUB-Core.asi` sẽ **ưu tiên kiểm tra tệp Icon trên đĩa cứng trước khi tải từ Internet**:
+Nhằm tối ưu hiệu năng và tiết kiệm băng thông, Client `HUB-Core.asi` sẽ **ưu tiên kiểm tra tệp PNG/JPG trên đĩa cứng trước khi tải từ Internet**:
 
 1. Khi khởi động, plugin tự động tạo tệp `HUB-Core/HUB-Roles.json` và thư mục `HUB-Core/icons/`.
-2. Khi Server gửi Tên Role hoặc URL, Client sẽ tra cứu trong `HUB-Core/HUB-Roles.json` và nạp tệp `.svg` tương ứng.
+2. Khi Server gửi Tên Role hoặc URL, Client sẽ tra cứu trong `HUB-Core/HUB-Roles.json` và nạp tệp `.png` tương ứng.
 
 ### Cấu trúc tệp `HUB-Core/HUB-Roles.json`:
 
 ```json
 {
   "comment": "HUB-Core Role & Icon Configuration File",
+  "draw_distance": 40.0,
   "preset_roles": {
-    "ADMIN": { "text": "ADMIN", "color": "0xFFB30000", "stroke": true, "svg": "HUB-Core/icons/admin.svg" },
-    "VIP": { "text": "VIP", "color": "0xFFCC9900", "stroke": false, "svg": "HUB-Core/icons/vip.svg" },
-    "MOD": { "text": "MOD", "color": "0xFF0088FF", "stroke": true, "svg": "HUB-Core/icons/mod.svg" },
-    "HELPER": { "text": "HELPER", "color": "0xFF22AA22", "stroke": false, "svg": "HUB-Core/icons/helper.svg" },
-    "DEV": { "text": "DEV", "color": "0xFFAA00FF", "stroke": true, "svg": "HUB-Core/icons/dev.svg" }
+    "ADMIN": { "text": "ADMIN", "color": "0xFFB30000", "stroke": true, "png": "HUB-Core/icons/admin.png" },
+    "VIP": { "text": "VIP", "color": "0xFFCC9900", "stroke": false, "png": "HUB-Core/icons/vip.png" },
+    "MOD": { "text": "MOD", "color": "0xFF0088FF", "stroke": true, "png": "HUB-Core/icons/mod.png" },
+    "HELPER": { "text": "HELPER", "color": "0xFF22AA22", "stroke": false, "png": "HUB-Core/icons/helper.png" },
+    "DEV": { "text": "DEV", "color": "0xFFAA00FF", "stroke": true, "png": "HUB-Core/icons/dev.png" }
   },
   "icon_mappings": {
-    "https://cdn.example.com/icons/admin.svg": "HUB-Core/icons/admin.svg"
+    "https://cdn.example.com/icons/admin.png": "HUB-Core/icons/admin.png"
   }
 }
 ```

@@ -3,7 +3,7 @@
  * @brief Đọc và quản lý tệp cấu hình HUB-Roles.json.
  *
  * Cho phép Server set role chỉ bằng tên định danh (vd: "ADMIN", "VIP", "MOD").
- * Client tự đọc text, color, stroke và tệp .svg tương ứng từ HUB-Roles.json.
+ * Client tự đọc text, color, stroke và tệp .png / .svg tương ứng từ HUB-Roles.json.
  */
 #pragma once
 #ifndef WIN32_LEAN_AND_MEAN
@@ -24,7 +24,7 @@ struct RolePresetConfig {
     std::string text;
     D3DCOLOR    color     = 0;
     bool        stroke    = false;
-    std::string svgPath;
+    std::string imagePath; // Tệp ảnh PNG / JPG / SVG
     bool        hasConfig = false;
 };
 
@@ -44,20 +44,44 @@ inline void InitDefaults() {
         if (json.is_open()) {
             json << "{\n";
             json << "  \"comment\": \"HUB-Core Role & Icon Configuration File\",\n";
+            json << "  \"draw_distance\": 40.0,\n";
             json << "  \"preset_roles\": {\n";
-            json << "    \"ADMIN\": { \"text\": \"ADMIN\", \"color\": \"0xFFB30000\", \"stroke\": true, \"svg\": \"HUB-Core/icons/admin.svg\" },\n";
-            json << "    \"VIP\": { \"text\": \"VIP\", \"color\": \"0xFFCC9900\", \"stroke\": false, \"svg\": \"HUB-Core/icons/vip.svg\" },\n";
-            json << "    \"MOD\": { \"text\": \"MOD\", \"color\": \"0xFF0088FF\", \"stroke\": true, \"svg\": \"HUB-Core/icons/mod.svg\" },\n";
-            json << "    \"HELPER\": { \"text\": \"HELPER\", \"color\": \"0xFF22AA22\", \"stroke\": false, \"svg\": \"HUB-Core/icons/helper.svg\" },\n";
-            json << "    \"DEV\": { \"text\": \"DEV\", \"color\": \"0xFFAA00FF\", \"stroke\": true, \"svg\": \"HUB-Core/icons/dev.svg\" }\n";
+            json << "    \"ADMIN\": { \"text\": \"ADMIN\", \"color\": \"0xFFB30000\", \"stroke\": true, \"png\": \"HUB-Core/icons/admin.png\" },\n";
+            json << "    \"VIP\": { \"text\": \"VIP\", \"color\": \"0xFFCC9900\", \"stroke\": false, \"png\": \"HUB-Core/icons/vip.png\" },\n";
+            json << "    \"MOD\": { \"text\": \"MOD\", \"color\": \"0xFF0088FF\", \"stroke\": true, \"png\": \"HUB-Core/icons/mod.png\" },\n";
+            json << "    \"HELPER\": { \"text\": \"HELPER\", \"color\": \"0xFF22AA22\", \"stroke\": false, \"png\": \"HUB-Core/icons/helper.png\" },\n";
+            json << "    \"DEV\": { \"text\": \"DEV\", \"color\": \"0xFFAA00FF\", \"stroke\": true, \"png\": \"HUB-Core/icons/dev.png\" }\n";
             json << "  },\n";
             json << "  \"icon_mappings\": {\n";
-            json << "    \"https://cdn.example.com/icons/admin.svg\": \"HUB-Core/icons/admin.svg\"\n";
+            json << "    \"https://cdn.example.com/icons/admin.png\": \"HUB-Core/icons/admin.png\"\n";
             json << "  }\n";
             json << "}\n";
             json.close();
         }
     }
+}
+
+/**
+ * @brief Đọc khoảng cách hiển thị Nametag tối đa từ HUB-Roles.json (Mặc định: 40m).
+ */
+inline float GetDrawDistance() {
+    InitDefaults();
+    std::ifstream file(kConfigFile);
+    if (!file.is_open()) return 40.0f;
+
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    std::string content = buffer.str();
+
+    size_t pos = content.find("\"draw_distance\"");
+    if (pos != std::string::npos) {
+        size_t colon = content.find(':', pos);
+        if (colon != std::string::npos) {
+            float dist = static_cast<float>(atof(content.c_str() + colon + 1));
+            if (dist > 1.0f) return dist;
+        }
+    }
+    return 40.0f;
 }
 
 /**
@@ -118,17 +142,29 @@ inline RolePresetConfig GetPresetRoleConfig(const std::string& roleName) {
         }
     }
 
-    // 4. SVG Path
-    size_t svgPos = block.find("\"svg\"");
-    if (svgPos != std::string::npos) {
-        size_t v1 = block.find('"', block.find(':', svgPos));
+    // 4. Image Path (hỗ trợ "png", "image", hoặc "svg")
+    size_t imgPos = block.find("\"png\"");
+    if (imgPos == std::string::npos) imgPos = block.find("\"image\"");
+    if (imgPos == std::string::npos) imgPos = block.find("\"svg\"");
+
+    if (imgPos != std::string::npos) {
+        size_t v1 = block.find('"', block.find(':', imgPos));
         size_t v2 = block.find('"', v1 + 1);
         if (v1 != std::string::npos && v2 != std::string::npos) {
-            cfg.svgPath = block.substr(v1 + 1, v2 - v1 - 1);
+            cfg.imagePath = block.substr(v1 + 1, v2 - v1 - 1);
         }
     }
-    if (cfg.svgPath.empty()) {
-        cfg.svgPath = "HUB-Core/icons/" + roleName + ".svg";
+
+    if (cfg.imagePath.empty()) {
+        std::string pngCandidate = "HUB-Core/icons/" + roleName + ".png";
+        std::string svgCandidate = "HUB-Core/icons/" + roleName + ".svg";
+        if (FileExists(pngCandidate)) {
+            cfg.imagePath = pngCandidate;
+        } else if (FileExists(svgCandidate)) {
+            cfg.imagePath = svgCandidate;
+        } else {
+            cfg.imagePath = pngCandidate;
+        }
     }
 
     cfg.hasConfig = true;

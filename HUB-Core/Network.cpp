@@ -142,8 +142,8 @@ static void ParsePresetRole(const uint8_t* data, uint32_t len) {
     uint8_t roleType = 0;
     if (!r.read(roleType)) return;
 
-    uint8_t useSvg = 0;
-    r.read(useSvg); // 0 = Text Badge Only, 1 = Load SVG Icon từ JSON
+    uint8_t useImage = 0;
+    r.read(useImage); // 0 = Text Badge Only, 1 = Load PNG Image Badge từ JSON
 
     std::string roleName;
     switch (roleType) {
@@ -164,8 +164,8 @@ static void ParsePresetRole(const uint8_t* data, uint32_t len) {
         if (cfg.hasConfig) {
             pn.tags[0] = { cfg.text, cfg.color, cfg.stroke };
             pn.tagCount = 1;
-            if (useSvg != 0 && !cfg.svgPath.empty()) {
-                pn.iconUrl = cfg.svgPath;
+            if (useImage != 0 && !cfg.imagePath.empty()) {
+                pn.iconUrl = cfg.imagePath;
             }
         }
     }
@@ -187,8 +187,8 @@ static void ParseRoleByName(const uint8_t* data, uint32_t len) {
     std::string roleName;
     if (!r.readString(roleName, 63)) return;
 
-    uint8_t useSvg = 0;
-    r.read(useSvg); // 0 = Text Badge Only, 1 = Load SVG Icon từ JSON
+    uint8_t useImage = 0;
+    r.read(useImage); // 0 = Text Badge Only, 1 = Load PNG Image Badge từ JSON
 
     PlayerNametag& pn = g_Players[playerId];
     pn.tagCount = 0;
@@ -199,14 +199,14 @@ static void ParseRoleByName(const uint8_t* data, uint32_t len) {
         pn.tags[0] = { cfg.text, cfg.color, cfg.stroke };
         pn.tagCount = 1;
 
-        if (useSvg != 0 && !cfg.svgPath.empty()) {
-            pn.iconUrl = cfg.svgPath;
+        if (useImage != 0 && !cfg.imagePath.empty()) {
+            pn.iconUrl = cfg.imagePath;
         }
     } else {
         pn.tags[0] = { roleName, D3DCOLOR_ARGB(255, 200, 200, 200), false };
         pn.tagCount = 1;
-        if (useSvg != 0) {
-            pn.iconUrl = "HUB-Core/icons/" + roleName + ".svg";
+        if (useImage != 0) {
+            pn.iconUrl = "HUB-Core/icons/" + roleName + ".png";
         }
     }
 

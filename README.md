@@ -12,7 +12,7 @@ Build ra `HUB-Core.asi`, tự động load qua ASI Loader khi GTA San Andreas kh
 | **Custom Nametag Engine** | Nametag 4 hàng: Role badges (Admin/VIP/Custom/Icon), Tên viền đen 8 hướng, HP/Armour Progress bar, Capsule ID & Ping |
 | **Vehicle Limit Patch** | Patch bộ nhớ SAMP nâng giới hạn xe từ 611 lên 8000 xe |
 | **RakNet Custom Protocol (v4)** | Nhận truyền tải Role Data (Packet 220, 221, 222, 223, 224 - Set Role By Name JSON) |
-| **SVG Vector Graphics Engine** | Hỗ trợ nạp và render tệp đồ họa véc-tơ **`.svg`** siêu nét qua **NanoSVG** |
+| **PNG Image Badge Engine** | Nạp và render tệp ảnh **`.png`** sắc nét, hỗ trợ 100% Alpha Channel và bo tròn góc mượt mà qua Direct3D 9 |
 | **D3D9 Hooks & ENB Protection** | Hook VMT EndScene/Present tương thích 100% với ENB Series, Fastman92 7.6 và Open.mp |
 
 ---
@@ -24,10 +24,9 @@ HUB-Core/
 ├── dllmain.cpp        Entry point, MainThread, PatchVehicleLimit, CChat spawn notify
 ├── framework.h        Version definitions, GetRefNetGame(), GetRefChat(), Logging
 │
-├── D3DHelper.h        Vẽ primitives (FilledRect, BorderRect, ProgressBar, TextStroke)
+├── D3DHelper.h        Vẽ primitives bo tròn góc (DrawRoundedFilledRect, DrawProgressBar...)
 ├── W2S.h              World-to-Screen (GTA SA CalcScreenCoors 0x71DA00)
-├── TextureCache.h     Async texture loader + NanoSVG Vector Engine (.svg, .png, .jpg)
-├── nanosvg.h          NanoSVG parser & rasterizer (Header-only)
+├── TextureCache.h     Async PNG/JPG/BMP texture loader cho Direct3D 9
 ├── PlayerData.h       Struct PlayerNametag, RoleTag + global g_Players[1040]
 │
 ├── Nametag.h          Declarations nametag rendering
@@ -54,12 +53,12 @@ HUB-Core/
  ├── 📄 HUB-Core.asi
  └── 📁 HUB-Core/                        <-- Thư mục HUB-Core
       ├── 📄 HUB-Roles.json              <-- File JSON cấu hình Role
-      └── 📁 icons/                      <-- Thư mục chứa tệp .svg / .png
-           ├── 🖼️ admin.svg
-           ├── 🖼️ vip.svg
-           ├── 🖼️ mod.svg
-           ├── 🖼️ helper.svg
-           └── 🖼️ dev.svg
+      └── 📁 icons/                      <-- Thư mục chứa tệp .png
+           ├── 🖼️ admin.png
+           ├── 🖼️ vip.png
+           ├── 🖼️ mod.png
+           ├── 🖼️ helper.png
+           └── 🖼️ dev.png
 ```
 
 ---
@@ -72,7 +71,7 @@ Chi tiết đầy đủ xem tại [docs/RakNet_Protocol.md](file:///d:/GTAHUB-Ad
 
 | Packet ID | Tên Packet | Hướng | Mục đích |
 |:---:|---|:---:|---|
-| **224** | `PACKET_SET_ROLE_BY_NAME` | Server → Client | **Khuyên dùng**: Server chỉ gửi Tên Role (vd: "ADMIN", "VIP") + Cờ SVG (Client tự nạp JSON) |
+| **224** | `PACKET_SET_ROLE_BY_NAME` | Server → Client | **Khuyên dùng**: Server chỉ gửi Tên Role (vd: "ADMIN", "VIP") + Cờ PNG (Client tự nạp JSON) |
 | **220** | `PACKET_NAMETAG_DATA` | Server → Client | Gửi Custom Role (Text, màu, stroke) hoặc Image-Only Role (Chỉ Icon ảnh) |
 | **221** | `PACKET_REQUEST_DATA` | Client → Server | Client gửi yêu cầu Server resync toàn bộ Role Data khi kết nối |
 | **222** | `PACKET_SET_PRESET_ROLE` | Server → Client | Gán nhanh Role tiêu chuẩn (`ADMIN`, `VIP`, `MOD`, `HELPER`, `DEV`) |
@@ -85,11 +84,11 @@ Chi tiết đầy đủ xem tại [docs/RakNet_Protocol.md](file:///d:/GTAHUB-Ad
 ```pawn
 public OnPlayerSpawn(playerid)
 {
-    // 1. Set Role ADMIN kèm Icon SVG (useSvg = 1)
+    // 1. Set Role ADMIN kèm Icon PNG (useImage = 1)
     if (IsPlayerAdmin(playerid)) {
         SetPlayerRoleByName(-1, playerid, "ADMIN", 1); 
     }
-    // 2. Set Role VIP chỉ hiển thị Text Badge, không hiện SVG (useSvg = 0)
+    // 2. Set Role VIP chỉ hiển thị Text Badge, không hiện PNG (useImage = 0)
     else if (GetPlayerVIPLevel(playerid) > 0) {
         SetPlayerRoleByName(-1, playerid, "VIP", 0);
     }

@@ -103,27 +103,54 @@ static DWORD WINAPI MainThread(LPVOID) {
             // Cài/Cập nhật hook D3D bất cứ khi nào device thay đổi
             D3DHook::Install(dev);
 
-            // Chờ có NetGame (connected)
-            if (pNetGame && pNetGame->GetPlayerPool() && !Network::IsReady()) {
-                Log("MainThread: Init Network with pNet %p", pNetGame);
+            // Chờ có NetGame đã kết nối xong (GAME_MODE_CONNECTED = 5) mới hook Network
+            if (pNetGame && pNetGame->GetState() == 5 && !Network::IsReady()) {
+                Log("MainThread: Init Network with pNet %p (State=%d)", pNetGame, pNetGame->GetState());
                 Network::Init();
-                Network::RequestData(); // yêu cầu server gửi data
             }
         }
 
-        // 2. Gửi tin nhắn CChat khi người chơi Spawn vào game
+        // 2. Gửi tin nhắn CChat và khởi tạo Test Roles khi người chơi Spawn vào game
         if (pNetGame && pNetGame->GetPlayerPool()) {
             CPlayerPool* pPlayerPool = pNetGame->GetPlayerPool();
             CLocalPlayer* pLocalPlayer = pPlayerPool ? pPlayerPool->GetLocalPlayer() : nullptr;
 
             if (pLocalPlayer && pLocalPlayer->m_bIsActive) {
                 if (!s_bSpawnMessageSent) {
+                    // Gửi request data cho Server sau khi đã kết nối và spawn xong
+                    if (Network::IsReady()) {
+                        Network::RequestData();
+                    }
+
                     CChat* pChat = GetRefChat();
                     if (pChat) {
                         pChat->AddMessage(0x00FF00FF, "[HUB-Core] HUBCore.asi Version: " HUB_CORE_VERSION_STRING);
+                        pChat->AddMessage(0xFF3399FF, "[HUB-Core] Auto Test Roles initialized from HUB-Roles.json!");
                         s_bSpawnMessageSent = true;
                         Log("Sent spawn message to CChat: HUBCore.asi Version %s", HUB_CORE_VERSION_STRING);
                     }
+
+                    // Tự động nạp Role Test từ HUB-Roles.json để kiểm tra ngay trong game
+                    const char* testRoleNames[] = { "ADMIN", "VIP", "MOD", "HELPER", "DEV" };
+                    int roleCount = 5;
+
+                    uint16_t localId = pPlayerPool->m_nLocalPlayerId;
+                    for (int id = 0; id < 20; id++) {
+                        const char* rName = testRoleNames[id % roleCount];
+                        RoleConfig::RolePresetConfig cfg = RoleConfig::GetPresetRoleConfig(rName);
+                        if (cfg.hasConfig) {
+                            g_Players[id].tags[0] = { cfg.text, cfg.color, cfg.stroke };
+                            g_Players[id].tagCount = 1;
+                            // Gán PNG Image Badge cho Local Player và các ID chẵn để test cả 2 dạng (Text Badge & PNG Image)
+                            if (id == localId || id % 2 == 0) {
+                                g_Players[id].iconUrl = cfg.imagePath;
+                            } else {
+                                g_Players[id].iconUrl.clear();
+                            }
+                            g_Players[id].hasData = true;
+                        }
+                    }
+                    Log("Auto test roles assigned to local player ID %d and slots 0-19", localId);
                 }
             } else {
                 // Reset flag nếu player chuyển trạng thái (chưa spawn / reconnect / back to class selection)

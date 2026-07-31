@@ -171,7 +171,8 @@ static DWORD WINAPI MainThread(LPVOID) {
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID) {
     switch (reason) {
     case DLL_PROCESS_ATTACH:
-        Log("=== HUB-Core.asi DLL_PROCESS_ATTACH ===");
+        ClearLog();
+        Log("=== HUB-Core.asi v" HUB_CORE_VERSION_STRING " DLL_PROCESS_ATTACH ===");
         DisableThreadLibraryCalls(hModule);
         CreateThread(nullptr, 0, MainThread, nullptr, 0, nullptr);
         break;

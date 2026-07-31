@@ -111,6 +111,12 @@ struct SAMPVersionInfo {
     }
 };
 
+inline void ClearLog() {
+    FILE* f = nullptr;
+    fopen_s(&f, "HUB-Core.log", "w");
+    if (f) fclose(f);
+}
+
 inline void Log(const char* fmt, ...) {
     FILE* f = nullptr;
     fopen_s(&f, "HUB-Core.log", "a");

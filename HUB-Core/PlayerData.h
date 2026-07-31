@@ -1,44 +1,59 @@
 ﻿/**
  * @file PlayerData.h
- * @brief Struct lưu dữ liệu role/badge của player nhận từ server.
+ * @brief Dữ liệu nametag động của mỗi player, nhận từ server qua RakNet.
  *
- * Dữ liệu này được server gửi qua custom RPC (xem Network.h).
- * Network.cpp ghi vào g_Players[], Nametag.cpp đọc để render badge.
+ * Server gửi packet 220 chứa:
+ *   - URL ảnh icon (tải async, không lag game)
+ *   - Tối đa 2 RoleTag, mỗi tag gồm: text, màu ARGB, có stroke hay không
  *
  * Thread-safety:
- *  g_Players được ghi bởi network callback (main thread của SAMP)
- *  và đọc bởi render callback (render thread = cùng main thread).
- *  Trong thực tế cả hai đều chạy trên game main thread nên không
- *  cần mutex. Nếu sau này có multi-thread đọc/ghi, thêm mutex vào.
+ *   g_Players[] được ghi bởi Network::hkReceive (game main thread)
+ *   và đọc bởi Nametag::RenderAll (render thread = cùng main thread GTA SA).
+ *   Không cần mutex.
  */
 #pragma once
 #include <string>
 #include <array>
+#include <d3d9.h>
 
-/// ID player tối đa trong SAMP
+/// Số player tối đa trong SAMP
 constexpr int kMaxPlayers = 1004;
 
+/// Số tag tối đa hiển thị trên một nametag (mỗi hàng 1 tag, 2 hàng)
+constexpr int kMaxTagsPerPlayer = 2;
+
+// ---------------------------------------------------------------------------
+
 /**
- * @brief Dữ liệu role/badge của một player.
+ * @brief Một role tag hiển thị trên nametag.
  *
- * Server cập nhật mỗi khi player đăng nhập hoặc đổi role.
- * Không cần server gửi lại mỗi frame — dữ liệu static cho đến khi thay đổi.
+ * Ví dụ server Pawn gửi:
+ *   tag[0] = { "ADMIN", 0xFFB30000, stroke=true  }
+ *   tag[1] = { "VIP",   0xFFCC9900, stroke=false }
  */
-struct PlayerRoleData {
-    bool        isAdmin   = false; ///< Player có quyền Admin
-    bool        isVIP     = false; ///< Player có VIP
-    std::string iconUrl;           ///< URL icon hiển thị trên nametag (rỗng = ẩn)
-    bool        hasData   = false; ///< true nếu đã nhận data từ server ít nhất 1 lần
+struct RoleTag {
+    std::string text;           ///< Nội dung badge (vd: "ADMIN", "VIP", "MOD")
+    D3DCOLOR    color  = 0;     ///< Màu nền badge dạng ARGB (0xAARRGGBB)
+    bool        stroke = false; ///< true = vẽ viền đen 8 hướng quanh text
 };
 
-/// Global array, index = playerID (0-1003)
-inline std::array<PlayerRoleData, kMaxPlayers> g_Players;
+/**
+ * @brief Toàn bộ dữ liệu nametag của 1 player, sync từ server.
+ */
+struct PlayerNametag {
+    std::array<RoleTag, kMaxTagsPerPlayer> tags; ///< Danh sách tag (index 0-1)
+    int         tagCount = 0;    ///< Số tag thực tế server gửi (0-2)
+    std::string iconUrl;         ///< URL ảnh icon (rỗng = không hiển thị)
+    bool        hasData  = false;///< true sau khi nhận packet đầu tiên từ server
+};
+
+/// Global array, index = playerID (0–1003)
+inline std::array<PlayerNametag, kMaxPlayers> g_Players;
 
 /**
- * @brief Reset data của player (khi player disconnect).
- * @param id PlayerID cần reset
+ * @brief Xóa data của player (gọi khi player disconnect).
  */
 inline void ResetPlayerData(int id) {
     if (id >= 0 && id < kMaxPlayers)
-        g_Players[id] = PlayerRoleData{};
+        g_Players[id] = PlayerNametag{};
 }

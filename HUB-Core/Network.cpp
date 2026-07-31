@@ -1,10 +1,11 @@
 /**
  * @file Network.cpp
- * @brief Hook RakClientInterface::Receive, parse packet 220 (nametag data).
+ * @brief Hook RakClientInterface::Receive, parse packet 220, 222, 223.
  */
 #include "pch.h"
 #include "Network.h"
 #include "PlayerData.h"
+#include "RoleConfig.h"
 
 #include <sampapi/0.3.DL-1/CNetGame.h>
 #include <cstring>
@@ -12,13 +13,6 @@
 #include <algorithm>
 
 using namespace sampapi::v03dl;
-
-// ---------------------------------------------------------------------------
-// Protocol
-// ---------------------------------------------------------------------------
-
-constexpr uint8_t kPktNametagData  = 220; ///< Server → Client
-constexpr uint8_t kPktRequestData  = 221; ///< Client → Server
 
 // ---------------------------------------------------------------------------
 // Minimal RakNet types (RakNet 2.x embedded trong samp.dll)
@@ -37,8 +31,9 @@ using tReceive = RakPacket*(__thiscall*)(void*);
 using tSendRaw = bool(__thiscall*)(void*, const char*, int, int, int, char, char[6], bool);
 
 /// VMT indices trên RakClientInterface trong SAMP 0.3.DL (RakNet 2.x)
-constexpr int kVmtReceive = 5;  ///< Receive()
-constexpr int kVmtSendRaw = 20; ///< Send(char* data, ...)
+constexpr int kVmtReceive          = 5;  ///< Receive()
+constexpr int kVmtDeallocatePacket = 6;  ///< DeallocatePacket(Packet*)
+constexpr int kVmtSendRaw          = 20; ///< Send(char* data, ...)
 
 // ---------------------------------------------------------------------------
 // Internal state
@@ -52,10 +47,6 @@ static bool     s_Ready       = false;
 // Packet reader helper
 // ---------------------------------------------------------------------------
 
-/**
- * @brief Cursor đọc byte-aligned trên buffer packet.
- * Tất cả trường trong packet đều byte-aligned nên không cần bit ops.
- */
 struct PacketReader {
     const uint8_t* buf;
     uint32_t       len;
@@ -83,28 +74,25 @@ struct PacketReader {
 };
 
 // ---------------------------------------------------------------------------
-// Parser
+// Free Packet Helper
+// ---------------------------------------------------------------------------
+
+static void DeallocateRakPacket(void* pRak, RakPacket* pkt) {
+    if (!pRak || !pkt) return;
+    reinterpret_cast<void(__fastcall*)(void*, void*, RakPacket*)>(
+        reinterpret_cast<DWORD*>(*(DWORD*)pRak)[kVmtDeallocatePacket])(pRak, nullptr, pkt);
+}
+
+// ---------------------------------------------------------------------------
+// Parsers
 // ---------------------------------------------------------------------------
 
 /**
  * @brief Parse PACKET_NAMETAG_DATA (ID=220) → cập nhật g_Players[].
- *
- * Layout:
- *   [0]       BYTE   220
- *   [1-2]     WORD   targetPlayerID
- *   [3]       BYTE   iconUrlLen
- *   [4..4+N)  char[] iconUrl
- *   [4+N]     BYTE   tagCount (0-2)
- *   Per tag:
- *     BYTE    textLen
- *     char[]  text
- *     DWORD   colorARGB  (D3DCOLOR, đã convert từ Pawn RRGGBBAA bởi plugin)
- *     BYTE    stroke     (0=off, 1=on)
  */
 static void ParseNametagData(const uint8_t* data, uint32_t len) {
     PacketReader r{ data, len };
 
-    // Bỏ qua byte đầu (packet ID đã biết)
     uint8_t  pktId   = 0; r.read(pktId);
     uint16_t playerId = 0;
     if (!r.read(playerId)) return;
@@ -140,6 +128,104 @@ static void ParseNametagData(const uint8_t* data, uint32_t len) {
     pn.hasData = true;
 }
 
+/**
+ * @brief Parse PACKET_SET_PRESET_ROLE (ID=222) → gán role cài sẵn (Admin, VIP, Mod...).
+ */
+static void ParsePresetRole(const uint8_t* data, uint32_t len) {
+    PacketReader r{ data, len };
+
+    uint8_t  pktId   = 0; r.read(pktId);
+    uint16_t playerId = 0;
+    if (!r.read(playerId)) return;
+    if (playerId >= (uint16_t)kMaxPlayers) return;
+
+    uint8_t roleType = 0;
+    if (!r.read(roleType)) return;
+
+    uint8_t useSvg = 0;
+    r.read(useSvg); // 0 = Text Badge Only, 1 = Load SVG Icon từ JSON
+
+    std::string roleName;
+    switch (roleType) {
+        case Network::ROLE_ADMIN:     roleName = "ADMIN"; break;
+        case Network::ROLE_VIP:       roleName = "VIP"; break;
+        case Network::ROLE_MODERATOR: roleName = "MOD"; break;
+        case Network::ROLE_HELPER:    roleName = "HELPER"; break;
+        case Network::ROLE_DEVELOPER: roleName = "DEV"; break;
+        default: break;
+    }
+
+    PlayerNametag& pn = g_Players[playerId];
+    pn.tagCount = 0;
+    pn.iconUrl.clear();
+
+    if (!roleName.empty()) {
+        RoleConfig::RolePresetConfig cfg = RoleConfig::GetPresetRoleConfig(roleName);
+        if (cfg.hasConfig) {
+            pn.tags[0] = { cfg.text, cfg.color, cfg.stroke };
+            pn.tagCount = 1;
+            if (useSvg != 0 && !cfg.svgPath.empty()) {
+                pn.iconUrl = cfg.svgPath;
+            }
+        }
+    }
+
+    pn.hasData = true;
+}
+
+/**
+ * @brief Parse PACKET_SET_ROLE_BY_NAME (ID=224) → Nạp Role theo tên định danh JSON.
+ */
+static void ParseRoleByName(const uint8_t* data, uint32_t len) {
+    PacketReader r{ data, len };
+
+    uint8_t  pktId   = 0; r.read(pktId);
+    uint16_t playerId = 0;
+    if (!r.read(playerId)) return;
+    if (playerId >= (uint16_t)kMaxPlayers) return;
+
+    std::string roleName;
+    if (!r.readString(roleName, 63)) return;
+
+    uint8_t useSvg = 0;
+    r.read(useSvg); // 0 = Text Badge Only, 1 = Load SVG Icon từ JSON
+
+    PlayerNametag& pn = g_Players[playerId];
+    pn.tagCount = 0;
+    pn.iconUrl.clear();
+
+    RoleConfig::RolePresetConfig cfg = RoleConfig::GetPresetRoleConfig(roleName);
+    if (cfg.hasConfig) {
+        pn.tags[0] = { cfg.text, cfg.color, cfg.stroke };
+        pn.tagCount = 1;
+
+        if (useSvg != 0 && !cfg.svgPath.empty()) {
+            pn.iconUrl = cfg.svgPath;
+        }
+    } else {
+        pn.tags[0] = { roleName, D3DCOLOR_ARGB(255, 200, 200, 200), false };
+        pn.tagCount = 1;
+        if (useSvg != 0) {
+            pn.iconUrl = "HUB-Core/icons/" + roleName + ".svg";
+        }
+    }
+
+    pn.hasData = true;
+}
+
+/**
+ * @brief Parse PACKET_CLEAR_ROLE (ID=223) → xóa sạch role của player.
+ */
+static void ParseClearRole(const uint8_t* data, uint32_t len) {
+    PacketReader r{ data, len };
+    uint8_t  pktId   = 0; r.read(pktId);
+    uint16_t playerId = 0;
+    if (!r.read(playerId)) return;
+    if (playerId < (uint16_t)kMaxPlayers) {
+        ResetPlayerData(playerId);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Hook
 // ---------------------------------------------------------------------------
@@ -149,12 +235,25 @@ static RakPacket* __fastcall hkReceive(void* pRak, void* edx) {
     if (!pkt || !pkt->data || pkt->length == 0) return pkt;
 
     switch (pkt->data[0]) {
-        case kPktNametagData:
+        case Network::kPktNametagData:
             ParseNametagData(pkt->data, pkt->length);
-            // Deallocate packet — VMT[6] = DeallocatePacket(Packet*)
-            reinterpret_cast<void(__fastcall*)(void*, void*, RakPacket*)>(
-                reinterpret_cast<DWORD*>(*(DWORD*)pRak)[6])(pRak, nullptr, pkt);
-            return NULL; // SAMP không thấy packet này
+            DeallocateRakPacket(pRak, pkt);
+            return NULL; // Hide packet from SAMP
+
+        case Network::kPktPresetRole:
+            ParsePresetRole(pkt->data, pkt->length);
+            DeallocateRakPacket(pRak, pkt);
+            return NULL;
+
+        case Network::kPktClearRole:
+            ParseClearRole(pkt->data, pkt->length);
+            DeallocateRakPacket(pRak, pkt);
+            return NULL;
+
+        case Network::kPktSetRoleByName:
+            ParseRoleByName(pkt->data, pkt->length);
+            DeallocateRakPacket(pRak, pkt);
+            return NULL;
 
         default:
             return pkt;

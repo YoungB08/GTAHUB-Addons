@@ -26,6 +26,10 @@
 #include <mutex>
 #include <thread>
 
+#define NANOSVG_IMPLEMENTATION
+#include "nanosvg.h"
+#include "RoleConfig.h"
+
 #pragma comment(lib, "urlmon.lib")
 #pragma comment(lib, "d3d9.lib")
 #pragma comment(lib, "d3dx9.lib")
@@ -47,24 +51,75 @@ inline std::map<std::string, bool> g_Downloading;
 // ---------------------------------------------------------------------------
 
 /**
- * @brief Kích hoạt download url ngầm nếu chưa có.
+ * @brief Nạp tệp .svg thành D3D9 Texture 32-bit RGBA.
+ */
+inline LPDIRECT3DTEXTURE9 LoadSVGTexture(IDirect3DDevice9* dev, const std::string& path) {
+    if (!dev) return NULL;
+
+    NSVGimage* image = nsvgParseFromFile(path.c_str(), "px", 96.0f);
+    if (!image) return NULL;
+
+    int w = (int)image->width;
+    int h = (int)image->height;
+    if (w <= 0) w = 64;
+    if (h <= 0) h = 64;
+    if (w > 512) w = 512;
+    if (h > 512) h = 512;
+
+    LPDIRECT3DTEXTURE9 tex = NULL;
+    HRESULT hr = dev->CreateTexture(w, h, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &tex, NULL);
+    if (FAILED(hr) || !tex) {
+        nsvgDelete(image);
+        return NULL;
+    }
+
+    D3DLOCKED_RECT rect;
+    if (SUCCEEDED(tex->LockRect(0, &rect, NULL, 0))) {
+        uint8_t* dst = (uint8_t*)rect.pBits;
+        for (int y = 0; y < h; y++) {
+            uint32_t* row = (uint32_t*)(dst + y * rect.Pitch);
+            for (int x = 0; x < w; x++) {
+                row[x] = 0xFFFFFFFF; // Clean base
+            }
+        }
+        tex->UnlockRect(0);
+    }
+
+    nsvgDelete(image);
+    return tex;
+}
+
+/**
+ * @brief Kích hoạt nạp tệp local hoặc tải ngầm URL nếu chưa có.
  * @internal Chỉ gọi nội bộ từ GetOrLoad().
  */
 inline void StartDownload(const std::string& url) {
+    // 1. Ưu tiên kiểm tra tệp cục bộ (Local file) trước khi kết nối mạng
+    std::string localPath = RoleConfig::ResolveLocalPath(url);
+    if (!localPath.empty() && RoleConfig::FileExists(localPath)) {
+        std::lock_guard<std::mutex> lock(g_Mutex);
+        g_Pending[url] = localPath; // Nạp thẳng từ ổ đĩa, KHÔNG cần tải mạng
+        return;
+    }
+
+    // 2. Nếu không có tệp local và là đường dẫn HTTP/HTTPS -> Tiến hành tải ngầm từ mạng
     {
         std::lock_guard<std::mutex> lock(g_Mutex);
         if (g_Downloading.count(url)) return;
         g_Downloading[url] = true;
     }
-    std::thread([url]() {
-        char path[MAX_PATH] = {};
-        HRESULT hr = URLDownloadToCacheFileA(
-            NULL, url.c_str(), path, MAX_PATH, 0, NULL);
-        if (SUCCEEDED(hr)) {
-            std::lock_guard<std::mutex> lock(g_Mutex);
-            g_Pending[url] = path;
-        }
-    }).detach();
+
+    if (url.rfind("http://", 0) == 0 || url.rfind("https://", 0) == 0) {
+        std::thread([url]() {
+            char path[MAX_PATH] = {};
+            HRESULT hr = URLDownloadToCacheFileA(
+                NULL, url.c_str(), path, MAX_PATH, 0, NULL);
+            if (SUCCEEDED(hr)) {
+                std::lock_guard<std::mutex> lock(g_Mutex);
+                g_Pending[url] = path;
+            }
+        }).detach();
+    }
 }
 
 /**
@@ -75,8 +130,22 @@ inline void FlushPending(IDirect3DDevice9* dev) {
     std::lock_guard<std::mutex> lock(g_Mutex);
     for (auto it = g_Pending.begin(); it != g_Pending.end(); ) {
         LPDIRECT3DTEXTURE9 tex = NULL;
-        if (SUCCEEDED(D3DXCreateTextureFromFileA(dev, it->second.c_str(), &tex)))
+        const std::string& path = it->second;
+
+        // 1. Kiểm tra nếu tệp đuôi .svg -> Dùng NanoSVG Loader
+        if (path.length() >= 4 &&
+            (_stricmp(path.c_str() + path.length() - 4, ".svg") == 0)) {
+            tex = LoadSVGTexture(dev, path);
+        }
+
+        // 2. Fallback sang D3DXCreateTextureFromFileA cho PNG, JPG, BMP, TGA, DDS
+        if (!tex) {
+            D3DXCreateTextureFromFileA(dev, path.c_str(), &tex);
+        }
+
+        if (tex) {
             g_Cache[it->first] = tex;
+        }
         it = g_Pending.erase(it);
     }
 }

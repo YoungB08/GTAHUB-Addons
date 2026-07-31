@@ -24,6 +24,7 @@
 #include "Network.h"
 #include "PlayerData.h"
 
+#include <sampapi/0.3.DL-1/CChat.h>
 #include <sampapi/0.3.DL-1/CNetGame.h>
 #include <sampapi/0.3.DL-1/CPlayerTags.h>
 
@@ -33,7 +34,7 @@ using namespace sampapi::v03dl;
 
 // ============================================================
 // Vehicle limit patch
-// Patch gi?i h?n 611 xe c?a SAMP lên 8000.
+// Patch giới hạn 611 xe của SAMP lên 8000.
 // ============================================================
 
 static DWORD FindPattern(HMODULE hMod, const char* pattern, size_t len) {
@@ -49,14 +50,14 @@ static void PatchVehicleLimit() {
     HMODULE hSamp = GetModuleHandleA("samp.dll");
     if (!hSamp) return;
 
-    // Pattern: CMP EAX, 0x190 ... CMP EAX, 0x263 (gi?i h?n 611 xe)
+    // Pattern: CMP EAX, 0x190 ... CMP EAX, 0x263 (giới hạn 611 xe)
     DWORD addr = FindPattern(hSamp,
         "\x3D\x90\x01\x00\x00\x0F\x8C\x32\x01\x00\x00"
         "\x3D\x63\x02\x00\x00\x0F\x8F\x27\x01\x00\x00", 22);
     if (!addr) return;
 
-    // Patch h?ng s? 0x263 ? 8000
-    DWORD limitAddr = addr + 12; // offset d?n DWORD c?a 0x263
+    // Patch hằng số 0x263 thành 8000
+    DWORD limitAddr = addr + 12; // offset dẫn DWORD của 0x263
     DWORD newLimit  = 8000;
     DWORD old;
     VirtualProtect(reinterpret_cast<LPVOID>(limitAddr), 4,
@@ -65,16 +66,36 @@ static void PatchVehicleLimit() {
     VirtualProtect(reinterpret_cast<LPVOID>(limitAddr), 4, old, &old);
 }
 
+#include "RoleConfig.h"
+
 // ============================================================
 // Main thread
 // ============================================================
 
 static DWORD WINAPI MainThread(LPVOID) {
     Log("MainThread started.");
+    RoleConfig::InitDefaults();
 
     int loopCount = 0;
+    static bool s_bSpawnMessageSent = false;
+
     while (true) {
+        Sleep(500); 
         loopCount++;
+
+        CNetGame* pNetGame = GetRefNetGame();
+
+        // 1. Kiểm tra IP khi CNetGame đã sẵn sàng và HostAddress đã được ghi nhận
+        if (pNetGame && pNetGame->m_szHostAddress && strlen(pNetGame->m_szHostAddress) > 0) {
+            if (strcmp(pNetGame->m_szHostAddress, "127.0.0.1") != 0 && 
+                strcmp(pNetGame->m_szHostAddress, "26.42.80.113") != 0) {
+                
+                MessageBoxA(0, "Neu muon choi may chu khac hay xoa HUB-Core.asi", "GTAHUB-Dev", MB_OK | MB_ICONERROR);
+                Sleep(500);
+                ExitProcess(0);
+            }
+        }
+
         auto ppDev = reinterpret_cast<IDirect3DDevice9**>(0xC97C28);
         IDirect3DDevice9* dev = (ppDev && !IsBadReadPtr(ppDev, sizeof(void*)) && *ppDev && !IsBadReadPtr(*ppDev, sizeof(void*))) ? *ppDev : nullptr;
 
@@ -83,18 +104,37 @@ static DWORD WINAPI MainThread(LPVOID) {
             D3DHook::Install(dev);
 
             // Chờ có NetGame (connected)
-            CNetGame* pNet = GetRefNetGame();
-            if (pNet && pNet->GetPlayerPool() && !Network::IsReady()) {
-                Log("MainThread: Init Network with pNet %p", pNet);
+            if (pNetGame && pNetGame->GetPlayerPool() && !Network::IsReady()) {
+                Log("MainThread: Init Network with pNet %p", pNetGame);
                 Network::Init();
                 Network::RequestData(); // yêu cầu server gửi data
             }
         }
+
+        // 2. Gửi tin nhắn CChat khi người chơi Spawn vào game
+        if (pNetGame && pNetGame->GetPlayerPool()) {
+            CPlayerPool* pPlayerPool = pNetGame->GetPlayerPool();
+            CLocalPlayer* pLocalPlayer = pPlayerPool ? pPlayerPool->GetLocalPlayer() : nullptr;
+
+            if (pLocalPlayer && pLocalPlayer->m_bIsActive) {
+                if (!s_bSpawnMessageSent) {
+                    CChat* pChat = GetRefChat();
+                    if (pChat) {
+                        pChat->AddMessage(0x00FF00FF, "[HUB-Core] HUBCore.asi Version: " HUB_CORE_VERSION_STRING);
+                        s_bSpawnMessageSent = true;
+                        Log("Sent spawn message to CChat: HUBCore.asi Version %s", HUB_CORE_VERSION_STRING);
+                    }
+                }
+            } else {
+                // Reset flag nếu player chuyển trạng thái (chưa spawn / reconnect / back to class selection)
+                s_bSpawnMessageSent = false;
+            }
+        }
+
         if (loopCount % 20 == 0) {
             Log("MainThread loop %d: dev=%p, D3DHookInstalled=%d, NetworkReady=%d",
                 loopCount, dev, (int)D3DHook::IsInstalled(), (int)Network::IsReady());
         }
-        Sleep(500);
     }
 
     return 0;

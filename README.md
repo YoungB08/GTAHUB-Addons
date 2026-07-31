@@ -1,187 +1,116 @@
-# GTAHUB-Addons — HUB-Core
+# GTAHUB-Addons — HUB-Core (v1.0.4)
 
-Client-side ASI plugin cho **SA-MP 0.3.DL** viết bằng C++/Win32.  
-Build ra `rcgame.asi`, load tự động qjua ASI Loader khi GTA SA khởi động.
+Client-side ASI plugin cho **SA-MP 0.3.DL** / **Open.mp** viết bằng C++/Win32 & Direct3D 9.  
+Build ra `HUB-Core.asi`, tự động load qua ASI Loader khi GTA San Andreas khởi động.
 
 ---
 
-## Tính năng
+## Tính Năng Chính
 
 | Module | Mô tả |
 |---|---|
-| **Custom Nametag** | Nametag 4 hàng: badge, tên stroke, HP/armour bar, ID/ping capsule |
-| **Vehicle Limit Patch** | Nâng giới hạn xe SAMP từ 611 → 8000 |
-| **RakNet Network** | Nhận role data (Admin/VIP/Icon) từ server qua custom packet |
+| **Custom Nametag Engine** | Nametag 4 hàng: Role badges (Admin/VIP/Custom/Icon), Tên viền đen 8 hướng, HP/Armour Progress bar, Capsule ID & Ping |
+| **Vehicle Limit Patch** | Patch bộ nhớ SAMP nâng giới hạn xe từ 611 lên 8000 xe |
+| **RakNet Custom Protocol (v4)** | Nhận truyền tải Role Data (Packet 220, 221, 222, 223, 224 - Set Role By Name JSON) |
+| **SVG Vector Graphics Engine** | Hỗ trợ nạp và render tệp đồ họa véc-tơ **`.svg`** siêu nét qua **NanoSVG** |
+| **D3D9 Hooks & ENB Protection** | Hook VMT EndScene/Present tương thích 100% với ENB Series, Fastman92 7.6 và Open.mp |
 
 ---
 
-## Cấu trúc file
+## Cấu Trúc Dự Án
 
 ```
 HUB-Core/
-├── dllmain.cpp        Entry point, PatchVehicleLimit, khởi động các module
+├── dllmain.cpp        Entry point, MainThread, PatchVehicleLimit, CChat spawn notify
+├── framework.h        Version definitions, GetRefNetGame(), GetRefChat(), Logging
 │
-├── D3DHelper.h        Draw primitives (FilledRect, BorderRect, ProgressBar, TextStroke)
+├── D3DHelper.h        Vẽ primitives (FilledRect, BorderRect, ProgressBar, TextStroke)
 ├── W2S.h              World-to-Screen (GTA SA CalcScreenCoors 0x71DA00)
-├── TextureCache.h     Async URL texture loader (download bg thread, create render thread)
-├── PlayerData.h       Struct PlayerRoleData + global g_Players[1004]
+├── TextureCache.h     Async texture loader + NanoSVG Vector Engine (.svg, .png, .jpg)
+├── nanosvg.h          NanoSVG parser & rasterizer (Header-only)
+├── PlayerData.h       Struct PlayerNametag, RoleTag + global g_Players[1040]
 │
-├── Nametag.h          Declarations
-├── Nametag.cpp        Render nametag 4 hàng cho tất cả player mỗi frame
+├── Nametag.h          Declarations nametag rendering
+├── Nametag.cpp        Render nametag 4 hàng cho tất cả player & actors mỗi frame
 │
-├── D3DHook.h          Declarations
-├── D3DHook.cpp        VMT hook IDirect3DDevice9::EndScene (index 42)
+├── D3DHook.h          Declarations D3D9 hook
+├── D3DHook.cpp        VMT Multi-device map hook IDirect3DDevice9::EndScene & Present
 │
-├── Network.h          Declarations + protocol documentation
-└── Network.cpp        Hook RakClientInterface::Receive, parse packet 220/221
+├── Network.h          Giao thức mạng v4 (IDs 220, 221, 222, 223, 224)
+├── Network.cpp        Hook RakClientInterface::Receive, parse packet 220, 222, 223, 224
+├── RoleConfig.h       Quản lý tệp HUB-Core/HUB-Roles.json & tra cứu local path
+│
+└── docs/
+    └── RakNet_Protocol.md   Tài liệu giao thức RakNet Server-Client chi tiết
 ```
 
 ---
 
-## Kiến trúc nametag
+## Vị Trí Lưu Tệp Trong Game GTA SA
 
+```text
+📁 GTA SAN ANDREAS/                     <-- Thư mục gốc Game
+ ├── 📄 gta_sa.exe
+ ├── 📄 HUB-Core.asi
+ └── 📁 HUB-Core/                        <-- Thư mục HUB-Core
+      ├── 📄 HUB-Roles.json              <-- File JSON cấu hình Role
+      └── 📁 icons/                      <-- Thư mục chứa tệp .svg / .png
+           ├── 🖼️ admin.svg
+           ├── 🖼️ vip.svg
+           ├── 🖼️ mod.svg
+           ├── 🖼️ helper.svg
+           └── 🖼️ dev.svg
 ```
-         centerX (từ WorldToScreen)
-              │
-   ┌──────────┼──────────────────────┐
-   │  ADMIN   │  [ICON]  │    VIP   │  ← Hàng 1: Badges (chỉ hiện nếu có role)
-   └──────────┴──────────┴──────────┘
-              PlayerName              ← Hàng 2: Cyan #33CCFF + stroke đen 8 hướng
-   ┌──────────────┐ ┌──────────────┐
-   │ ████░ HP    │ │ ████░ Armour │  ← Hàng 3: Progress bars (đỏ | bạc)
-   └──────────────┘ └──────────────┘
-   ┌──────────────────────────────┐
-   │      ID: 42   |   12ms      │  ← Hàng 4: Capsule info
-   └──────────────────────────────┘
-```
-
-Vị trí `centerX / topY` được tính từ `GetBonePosition(8)` (đầu player) + offset 0.28f,  
-rồi chiếu qua `CalcScreenCoors` (`gta_sa.exe+0x71DA00`).
 
 ---
 
-## Giao thức mạng (Network Protocol)
+## Giao Thức Mạng RakNet (Server-Client Protocol v4)
 
-### Packet IDs
+Chi tiết đầy đủ xem tại [docs/RakNet_Protocol.md](file:///d:/GTAHUB-Addons/docs/RakNet_Protocol.md).
 
-| ID | Hướng | Mô tả |
-|---|---|---|
-| `220` | Server → Client | Toàn bộ nametag data (icon + tags) của 1 player |
-| `221` | Client → Server | Client yêu cầu server resync data |
+### 1. Danh sách Packet IDs
 
-### Cấu trúc Packet 220 — `PACKET_NAMETAG_DATA`
+| Packet ID | Tên Packet | Hướng | Mục đích |
+|:---:|---|:---:|---|
+| **224** | `PACKET_SET_ROLE_BY_NAME` | Server → Client | **Khuyên dùng**: Server chỉ gửi Tên Role (vd: "ADMIN", "VIP") + Cờ SVG (Client tự nạp JSON) |
+| **220** | `PACKET_NAMETAG_DATA` | Server → Client | Gửi Custom Role (Text, màu, stroke) hoặc Image-Only Role (Chỉ Icon ảnh) |
+| **221** | `PACKET_REQUEST_DATA` | Client → Server | Client gửi yêu cầu Server resync toàn bộ Role Data khi kết nối |
+| **222** | `PACKET_SET_PRESET_ROLE` | Server → Client | Gán nhanh Role tiêu chuẩn (`ADMIN`, `VIP`, `MOD`, `HELPER`, `DEV`) |
+| **223** | `PACKET_CLEAR_ROLE` | Server → Client | Xóa toàn bộ Role Badge và Icon của người chơi |
 
-| Offset | Size | Type | Mô tả |
-|---|---|---|---|
-| 0 | 1 | `BYTE` | Packet ID = `220` |
-| 1 | 2 | `WORD` | targetPlayerID (0–1003) |
-| 3 | 1 | `BYTE` | iconUrlLen (0 = không có icon) |
-| 4 | N | `char[]` | iconUrl (không null-terminated) |
-| 4+N | 1 | `BYTE` | tagCount (0–2, tối đa 2 tag) |
-| per tag | 1 | `BYTE` | textLen |
-| per tag | M | `char[]` | text badge (không null-terminated) |
-| per tag | 4 | `DWORD` | colorARGB (D3DCOLOR `0xAARRGGBB`) |
-| per tag | 1 | `BYTE` | stroke (`0`=tắt, `1`=bật) |
+---
 
-> **Pawn color**: Pawn dùng `0xRRGGBBAA`, plugin C++ phải đổi sang `0xAARRGGBB` trước khi gửi.
-
-### Cấu trúc Packet 221 — `PACKET_REQUEST_ROLES`
-
-| Offset | Size | Type | Mô tả |
-|---|---|---|---|
-| 0 | 1 | `BYTE` | Packet ID = `221` |
-
-### Ví dụ server plugin (C++)
-
-```cpp
-// Gửi role của 1 player cho 1 client
-void SendRolePacket(RakServerInterface* pRak, int toPlayer, int targetPlayer,
-                    bool isAdmin, bool isVIP, const char* iconUrl)
-{
-    uint8_t buf[260];
-    int pos = 0;
-    buf[pos++] = 220;
-    *(uint16_t*)&buf[pos] = (uint16_t)targetPlayer; pos += 2;
-    buf[pos++] = (isAdmin ? 1 : 0) | (isVIP ? 2 : 0);
-    uint8_t urlLen = (uint8_t)min(strlen(iconUrl), 255u);
-    buf[pos++] = urlLen;
-    memcpy(&buf[pos], iconUrl, urlLen); pos += urlLen;
-
-    PlayerID pid = pRak->GetPlayerIDFromIndex(toPlayer);
-    pRak->Send((char*)buf, pos, HIGH_PRIORITY, RELIABLE_ORDERED, 0, pid, false);
-}
-```
-
-### Ví dụ Pawn (gamemode)
+### 2. Ví Dụ Pawn Gamemode (Packet 224)
 
 ```pawn
-// Gửi role cho tất cả player khi 1 player mới connect
-public OnPlayerConnect(playerid) {
-    for (new i = 0; i < MAX_PLAYERS; i++) {
-        if (IsPlayerConnected(i)) {
-            // Gọi native của server plugin C++
-            SendPlayerRoleData(playerid, i,
-                IsAdmin(i), IsVIP(i), GetIconUrl(i));
-        }
+public OnPlayerSpawn(playerid)
+{
+    // 1. Set Role ADMIN kèm Icon SVG (useSvg = 1)
+    if (IsPlayerAdmin(playerid)) {
+        SetPlayerRoleByName(-1, playerid, "ADMIN", 1); 
     }
+    // 2. Set Role VIP chỉ hiển thị Text Badge, không hiện SVG (useSvg = 0)
+    else if (GetPlayerVIPLevel(playerid) > 0) {
+        SetPlayerRoleByName(-1, playerid, "VIP", 0);
+    }
+    return 1;
 }
 ```
 
 ---
 
-## Build
+## Hướng Dẫn Build Dự Án
 
-**Yêu cầu:**
-- Visual Studio 2019+ (toolset v142 hoặc v143)
-- DirectX SDK (June 2010) — cung cấp `d3d9.h`, `d3dx9.h`, `d3dx9.lib`
-- Windows SDK 10.0
+### Yêu cầu môi trường:
+- **Visual Studio 2019+** (Toolset v142 / v143)
+- **DirectX SDK (June 2010)** — Thư viện `d3d9.h`, `d3dx9.h`, `d3dx9.lib`
+- **Windows SDK 10.0**
 
-**Cấu hình:**
-| Configuration | Output | Ghi chú |
-|---|---|---|
-| Debug\|Win32 | `.asi` | Thư mục build mặc định |
-| Release\|Win32 | `D:\GTA-Hub\GTA SAN ANDREAS\rcgame.asi` | Auto-deploy vào GTA SA folder |
-
-**Build:**
-```
-Mở HUB-Core.sln → chọn Release|Win32 → Ctrl+Shift+B
-```
-
----
-
-## Kỹ thuật sử dụng
-
-| Kỹ thuật | Mô tả |
-|---|---|
-| VMT Hook (EndScene) | Patch `IDirect3DDevice9` vtable[42] để render mỗi frame |
-| VMT Hook (Receive) | Patch `RakClientInterface` vtable[5] để intercept packet |
-| D3D9 StateBlock | Capture/restore toàn bộ render state — không phá SAMP render |
-| `GetBonePosition(8)` | Lấy tọa độ đầu player (bone HEAD) trong world space |
-| `CalcScreenCoors` | GTA SA internal W2S tại `gta_sa.exe+0x71DA00` |
-| Async texture load | Download URL trên bg thread, tạo texture trên render thread |
-
----
-
-## Dependencies
-
-| Lib | Dùng cho |
-|---|---|
-| `sampapi.lib` | Wrapper SA-MP API (RefNetGame, RefPlayerTags, ...) |
-| `d3d9.lib` | Direct3D 9 |
-| `d3dx9.lib` | D3DXFont, D3DXSprite, D3DXCreateTexture |
-| `urlmon.lib` | URLDownloadToCacheFileA |
-| `Ws2_32.lib` | Winsock (RakNet dependency) |
-
----
-
-## Update Changelog (Version 1.0.4)
-
-### 🚀 High-Performance D3D9 Engine & Crash Fixes
-- **Multi-Device Map Hooking**: Resolved multi-device pointer overwrites during Open.mp startup by maintaining per-device `std::unordered_map` function lookups for `Present` (VMT 17) and `EndScene` (VMT 42).
-- **Fastman92 & ENB Compatibility**: Replaced instruction-patching trampoline with clean VMT chaining, eliminating `0xC0000005` ACCESS_VIOLATION crashes when running alongside Fastman92 Limit Adjuster 7.6.
-- **Zero-Leak Render State Preservation**: Integrated 8-DWORD state backup and restoration (`SaveState`/`RestoreState`) capturing `Texture(0)`, `FVF`, Z-buffer, AlphaBlend, Fog, and Scissor states to prevent 3D terrain texture smearing and white ground rendering.
-- **Continuous Device Monitoring**: `MainThread` dynamically tracks `0xC97C28` (`RwD3D9Device`) to automatically hook newly created Direct3D devices as GTA SA transitions from loading screens into the world.
-- **Safe Native Nametag Hiding**: Applied native `pPlayer->m_bDrawLabels = FALSE` per `CRemotePlayer` to suppress default SA-MP/Open.mp nametags cleanly.
-- **CActorPool & Remote Player Support**: Fixed player loop condition checks and added full rendering support for `CActorPool` actors and `CPlayerPool` remote players.
-- **Cooperative Level Protection**: Guarded render loops with `dev->TestCooperativeLevel()` to handle device reset during resolution changes and alt-tabbing without crashing.
-
+### Các bước biên dịch:
+1. Mở solution `HUB-Core.sln` bằng Visual Studio.
+2. Chọn cấu hình **Release | Win32**.
+3. Nhấn `Ctrl + Shift + B` (hoặc lệnh CLI MSBuild):
+   ```cmd
+   MSBuild.exe HUB-Core.vcxproj /p:Configuration=Release /p:Platform=Win32
+   ```
+4. Output file `HUB-Core.asi` sẽ được tự động copy vào thư mục `GTA SAN ANDREAS`.

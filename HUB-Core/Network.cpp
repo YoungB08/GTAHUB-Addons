@@ -168,13 +168,18 @@ static RakPacket* __fastcall hkReceive(void* pRak, void* edx) {
 void Network::Init() {
     if (s_Ready) return;
 
-    CNetGame* pNet = RefNetGame();
+    CNetGame* pNet = GetRefNetGame();
     if (!pNet) return;
 
-    void* pRak = pNet->GetRakClient();
-    if (!pRak) return;
+    SAMPVersionInfo vInfo = SAMPVersionInfo::Get();
+    if (!vInfo.fnGetRakClient) return;
+
+    void* pRak = reinterpret_cast<void*(__thiscall*)(void*)>(vInfo.fnGetRakClient)(pNet);
+    if (!pRak || IsBadReadPtr(pRak, sizeof(void*))) return;
 
     s_VMT = *reinterpret_cast<DWORD**>(pRak);
+    if (!s_VMT || IsBadReadPtr(s_VMT, sizeof(void*) * 10)) return;
+
     s_OrigReceive = reinterpret_cast<tReceive>(s_VMT[kVmtReceive]);
 
     DWORD old;
@@ -183,14 +188,19 @@ void Network::Init() {
     VirtualProtect(&s_VMT[kVmtReceive], sizeof(DWORD), old, &old);
 
     s_Ready = true;
+    Log("Network::Init succeeded! pRak=%p", pRak);
 }
 
 void Network::RequestData() {
     if (!s_Ready) return;
 
-    CNetGame* pNet = RefNetGame();
+    CNetGame* pNet = GetRefNetGame();
     if (!pNet) return;
-    void* pRak = pNet->GetRakClient();
+
+    SAMPVersionInfo vInfo = SAMPVersionInfo::Get();
+    if (!vInfo.fnGetRakClient) return;
+
+    void* pRak = reinterpret_cast<void*(__thiscall*)(void*)>(vInfo.fnGetRakClient)(pNet);
     if (!pRak) return;
 
     uint8_t buf[1] = { kPktRequestData };

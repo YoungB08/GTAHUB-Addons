@@ -116,8 +116,15 @@ static void DrawIcon(IDirect3DDevice9* dev, float x, float y, float targetW, flo
 /**
  * @brief Vẽ hàng tag + icon với tỉ lệ scale theo khoảng cách (hỗ trợ tối đa 3 role mỗi hàng).
  */
+struct BadgeItem {
+    float width;
+    float height;
+    std::string imgPath;
+    int tagIndex;
+};
+
 /**
- * @brief Vẽ hàng tag + icon với tỉ lệ scale theo khoảng cách (hỗ trợ tối đa 5 role mỗi hàng).
+ * @brief Vẽ hàng tag + icon với tỉ lệ scale theo khoảng cách (tự động rớt xuống tầng mới nếu vượt quá độ rộng).
  */
 static float DrawTagRow(IDirect3DDevice9* dev, float centerX, float y, float scale, const PlayerNametag& pn) {
     if (pn.tagCount == 0 && pn.iconUrl.empty()) return 0.f;
@@ -127,57 +134,92 @@ static float DrawTagRow(IDirect3DDevice9* dev, float centerX, float y, float sca
     float tagH    = 20.f * scale;
     float badgeH  = 28.f * scale;
     float tagGap  = kTagGap * scale;
+    float maxRowW = 240.f * scale; // Giới hạn chiều rộng tối đa mỗi tầng
 
     int activeTags = (pn.tagCount < kMaxTagsPerPlayer) ? (int)pn.tagCount : kMaxTagsPerPlayer;
 
-    float tagW[kMaxTagsPerPlayer] = { 0.f };
-    float tagH_Render[kMaxTagsPerPlayer] = { 0.f };
-    std::string tagImg[kMaxTagsPerPlayer];
-
+    std::vector<BadgeItem> items;
     for (int t = 0; t < activeTags; t++) {
-        tagImg[t] = pn.tags[t].imagePath;
+        BadgeItem item;
+        item.tagIndex = t;
+        item.imgPath = pn.tags[t].imagePath;
+        item.height = tagH;
+        item.width = 0.f;
 
-        if (!tagImg[t].empty()) {
-            LPDIRECT3DTEXTURE9 tex = TextureCache::GetOrLoad(dev, tagImg[t]);
+        if (!item.imgPath.empty()) {
+            LPDIRECT3DTEXTURE9 tex = TextureCache::GetOrLoad(dev, item.imgPath);
             if (tex) {
                 D3DSURFACE_DESC desc;
                 tex->GetLevelDesc(0, &desc);
                 if (desc.Width > 0 && desc.Height > 0) {
                     float aspect = static_cast<float>(desc.Width) / static_cast<float>(desc.Height);
-                    tagW[t] = badgeH * aspect;
-                    tagH_Render[t] = badgeH;
+                    item.width = badgeH * aspect;
+                    item.height = badgeH;
                 }
             }
         }
 
-        if (tagW[t] <= 0.f) {
+        if (item.width <= 0.f) {
             SIZE s = D3DHelper::MeasureText(font, pn.tags[t].text.c_str());
-            tagW[t] = static_cast<float>(s.cx) + tagPadX * 2.f;
-            tagH_Render[t] = tagH;
+            item.width = static_cast<float>(s.cx) + tagPadX * 2.f;
+            item.height = tagH;
         }
+
+        items.push_back(item);
     }
 
-    float totalW = 0.f;
-    for (int t = 0; t < activeTags; t++) {
-        if (t > 0) totalW += tagGap;
-        totalW += tagW[t];
-    }
+    // Tách items thành các hàng (Rows / Tầng) nếu vượt quá chiều rộng
+    std::vector<std::vector<BadgeItem>> rows;
+    std::vector<BadgeItem> currentRow;
+    float currentW = 0.f;
 
-    float x = centerX - totalW * 0.5f;
-    float maxRowH = tagH;
-
-    for (int t = 0; t < activeTags; t++) {
-        if (tagH_Render[t] == badgeH && !tagImg[t].empty()) {
-            DrawIcon(dev, x, y, tagW[t], badgeH, tagImg[t]);
-            if (badgeH > maxRowH) maxRowH = badgeH;
-        } else {
-            float tagY = y + (maxRowH > tagH ? (maxRowH - tagH) * 0.5f : 0.f);
-            DrawTag(dev, x, tagY, scale, pn.tags[t]);
+    for (const auto& item : items) {
+        float testW = currentW + (currentRow.empty() ? 0.f : tagGap) + item.width;
+        if (!currentRow.empty() && testW > maxRowW) {
+            rows.push_back(currentRow);
+            currentRow.clear();
+            currentW = 0.f;
         }
-        x += tagW[t] + tagGap;
+        if (!currentRow.empty()) currentW += tagGap;
+        currentW += item.width;
+        currentRow.push_back(item);
+    }
+    if (!currentRow.empty()) {
+        rows.push_back(currentRow);
     }
 
-    return maxRowH;
+    // Vẽ từng tầng (Row)
+    float curY = y;
+    float totalHeight = 0.f;
+
+    for (size_t r = 0; r < rows.size(); r++) {
+        const auto& row = rows[r];
+        float rowW = 0.f;
+        float maxH = tagH;
+
+        for (size_t i = 0; i < row.size(); i++) {
+            if (i > 0) rowW += tagGap;
+            rowW += row[i].width;
+            if (row[i].height > maxH) maxH = row[i].height;
+        }
+
+        float x = centerX - rowW * 0.5f;
+
+        for (const auto& item : row) {
+            if (item.height == badgeH && !item.imgPath.empty()) {
+                DrawIcon(dev, x, curY, item.width, badgeH, item.imgPath);
+            } else {
+                float tagY = curY + (maxH > tagH ? (maxH - tagH) * 0.5f : 0.f);
+                DrawTag(dev, x, tagY, scale, pn.tags[item.tagIndex]);
+            }
+            x += item.width + tagGap;
+        }
+
+        curY += maxH + (kGap * scale);
+        totalHeight += maxH + (r + 1 < rows.size() ? (kGap * scale) : 0.f);
+    }
+
+    return totalHeight;
 }
 
 // ---------------------------------------------------------------------------

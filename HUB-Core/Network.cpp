@@ -1,6 +1,6 @@
 /**
  * @file Network.cpp
- * @brief Hook RakClientInterface::Receive, parse packet 220, 222, 223.
+ * @brief Hook RakClientInterface::Receive(), parse packet 220, 222, 223, 224, 225, 226, 227.
  */
 #include "pch.h"
 #include "Network.h"
@@ -30,22 +30,13 @@ struct RakPacket {
 using tReceive = RakPacket*(__thiscall*)(void*);
 using tSendRaw = bool(__thiscall*)(void*, const char*, int, int, int, char, char[6], bool);
 
-/// VMT indices trên RakClientInterface trong SAMP 0.3.DL (RakNet 2.x)
 constexpr int kVmtReceive          = 5;  ///< Receive()
 constexpr int kVmtDeallocatePacket = 6;  ///< DeallocatePacket(Packet*)
 constexpr int kVmtSendRaw          = 20; ///< Send(char* data, ...)
 
-// ---------------------------------------------------------------------------
-// Internal state
-// ---------------------------------------------------------------------------
-
 static tReceive s_OrigReceive = NULL;
 static DWORD*   s_VMT         = NULL;
 static bool     s_Ready       = false;
-
-// ---------------------------------------------------------------------------
-// Packet reader helper
-// ---------------------------------------------------------------------------
 
 struct PacketReader {
     const uint8_t* buf;
@@ -73,10 +64,6 @@ struct PacketReader {
     }
 };
 
-// ---------------------------------------------------------------------------
-// Free Packet Helper
-// ---------------------------------------------------------------------------
-
 static void DeallocateRakPacket(void* pRak, RakPacket* pkt) {
     if (!pRak || !pkt) return;
     reinterpret_cast<void(__fastcall*)(void*, void*, RakPacket*)>(
@@ -87,63 +74,45 @@ static void DeallocateRakPacket(void* pRak, RakPacket* pkt) {
 // Parsers
 // ---------------------------------------------------------------------------
 
-/**
- * @brief Parse PACKET_NAMETAG_DATA (ID=220) → cập nhật g_Players[].
- */
 static void ParseNametagData(const uint8_t* data, uint32_t len) {
     PacketReader r{ data, len };
 
     uint8_t  pktId   = 0; r.read(pktId);
     uint16_t playerId = 0;
-    if (!r.read(playerId)) return;
-    if (playerId >= (uint16_t)kMaxPlayers) return;
+    if (!r.read(playerId) || playerId >= (uint16_t)kMaxPlayers) return;
+
+    uint8_t slotID = 0;
+    if (!r.read(slotID) || slotID >= kMaxRoleSlots) return;
 
     PlayerNametag& pn = g_Players[playerId];
+    auto& slot = pn.slots[slotID];
+    slot = RoleSlotClientData{};
 
-    // iconUrl
-    if (!r.readString(pn.iconUrl)) return;
+    uint8_t active = 0;
+    if (!r.read(active)) return;
+    slot.active = (active != 0);
 
-    // tags
-    uint8_t tagCount = 0;
-    if (!r.read(tagCount)) return;
-    tagCount = (uint8_t)(std::min)((int)tagCount, kMaxTagsPerPlayer);
-
-    pn.tagCount = 0;
-    for (int i = 0; i < tagCount; i++) {
-        RoleTag& tag = pn.tags[i];
-
-        if (!r.readString(tag.text, 63)) return;
-
-        uint32_t color = 0;
-        if (!r.read(color)) return;
-        tag.color = static_cast<D3DCOLOR>(color);
-
-        uint8_t stroke = 0;
-        if (!r.read(stroke)) return;
-        tag.stroke = (stroke != 0);
-
-        pn.tagCount++;
+    if (slot.active) {
+        r.readString(slot.text, 63);
+        uint32_t color = 0; r.read(color); slot.color = color;
+        uint32_t bgColor = 0; r.read(bgColor); slot.bgColor = bgColor;
+        uint8_t stroke = 0; r.read(stroke); slot.stroke = (stroke != 0);
+        r.readString(slot.imagePath, 255);
     }
 
     pn.hasData = true;
 }
 
-/**
- * @brief Parse PACKET_SET_PRESET_ROLE (ID=222) → gán role cài sẵn (Admin, VIP, Mod...).
- */
 static void ParsePresetRole(const uint8_t* data, uint32_t len) {
     PacketReader r{ data, len };
 
     uint8_t  pktId   = 0; r.read(pktId);
     uint16_t playerId = 0;
-    if (!r.read(playerId)) return;
-    if (playerId >= (uint16_t)kMaxPlayers) return;
+    if (!r.read(playerId) || playerId >= (uint16_t)kMaxPlayers) return;
 
-    uint8_t roleType = 0;
-    if (!r.read(roleType)) return;
-
-    uint8_t useImage = 0;
-    r.read(useImage); // 0 = Text Badge Only, 1 = Load PNG Image Badge từ JSON
+    uint8_t roleType = 0; r.read(roleType);
+    uint8_t slotID = 0; r.read(slotID);
+    if (slotID >= kMaxRoleSlots) slotID = 0;
 
     std::string roleName;
     switch (roleType) {
@@ -156,67 +125,117 @@ static void ParsePresetRole(const uint8_t* data, uint32_t len) {
     }
 
     PlayerNametag& pn = g_Players[playerId];
-    pn.tagCount = 0;
-    pn.iconUrl.clear();
+    auto& slot = pn.slots[slotID];
+    slot = RoleSlotClientData{};
 
     if (!roleName.empty()) {
+        slot.active = true;
+        slot.text = roleName;
+        slot.imagePath = "HUB-Core/icons/" + roleName + ".png";
+        
         RoleConfig::RolePresetConfig cfg = RoleConfig::GetPresetRoleConfig(roleName);
         if (cfg.hasConfig) {
-            std::string img = (useImage != 0) ? cfg.imagePath : "";
-            pn.tags[0] = { cfg.text, cfg.color, cfg.stroke, img };
-            pn.tagCount = 1;
+            slot.color = cfg.color;
+            slot.stroke = cfg.stroke;
+        } else {
+            slot.color = D3DCOLOR_ARGB(255, 200, 200, 200);
+            slot.stroke = true;
         }
     }
 
     pn.hasData = true;
 }
 
-/**
- * @brief Parse PACKET_SET_ROLE_BY_NAME (ID=224) → Nạp Role theo tên định danh JSON.
- */
 static void ParseRoleByName(const uint8_t* data, uint32_t len) {
     PacketReader r{ data, len };
 
     uint8_t  pktId   = 0; r.read(pktId);
     uint16_t playerId = 0;
-    if (!r.read(playerId)) return;
-    if (playerId >= (uint16_t)kMaxPlayers) return;
+    if (!r.read(playerId) || playerId >= (uint16_t)kMaxPlayers) return;
+
+    uint8_t slotID = 0; r.read(slotID);
+    if (slotID >= kMaxRoleSlots) slotID = 0;
 
     std::string roleName;
     if (!r.readString(roleName, 63)) return;
 
-    uint8_t useImage = 0;
-    r.read(useImage); // 0 = Text Badge Only, 1 = Load PNG Image Badge từ JSON
-
     PlayerNametag& pn = g_Players[playerId];
-    pn.tagCount = 0;
-    pn.iconUrl.clear();
+    auto& slot = pn.slots[slotID];
+    slot = RoleSlotClientData{};
 
-    RoleConfig::RolePresetConfig cfg = RoleConfig::GetPresetRoleConfig(roleName);
-    if (cfg.hasConfig) {
-        std::string img = (useImage != 0) ? cfg.imagePath : "";
-        pn.tags[0] = { cfg.text, cfg.color, cfg.stroke, img };
-        pn.tagCount = 1;
-    } else {
-        std::string img = (useImage != 0) ? ("HUB-Core/icons/" + roleName + ".png") : "";
-        pn.tags[0] = { roleName, D3DCOLOR_ARGB(255, 200, 200, 200), false, img };
-        pn.tagCount = 1;
+    if (!roleName.empty()) {
+        slot.active = true;
+        slot.text = roleName;
+        slot.imagePath = "HUB-Core/icons/" + roleName + ".png";
+        slot.color = D3DCOLOR_ARGB(255, 200, 200, 200);
+        slot.stroke = true;
     }
 
     pn.hasData = true;
 }
 
-/**
- * @brief Parse PACKET_CLEAR_ROLE (ID=223) → xóa sạch role của player.
- */
 static void ParseClearRole(const uint8_t* data, uint32_t len) {
     PacketReader r{ data, len };
     uint8_t  pktId   = 0; r.read(pktId);
     uint16_t playerId = 0;
-    if (!r.read(playerId)) return;
-    if (playerId < (uint16_t)kMaxPlayers) {
+    if (!r.read(playerId) || playerId >= (uint16_t)kMaxPlayers) return;
+
+    int8_t slotID = -1;
+    r.read(slotID);
+
+    PlayerNametag& pn = g_Players[playerId];
+    if (slotID == -1) {
         ResetPlayerData(playerId);
+    } else if (slotID >= 0 && slotID < kMaxRoleSlots) {
+        pn.slots[slotID] = RoleSlotClientData{};
     }
+}
+
+static void ParseSetRainbow(const uint8_t* data, uint32_t len) {
+    PacketReader r{ data, len };
+    uint8_t  pktId   = 0; r.read(pktId);
+    uint16_t playerId = 0;
+    if (!r.read(playerId) || playerId >= (uint16_t)kMaxPlayers) return;
+
+    int8_t slotID = -1; r.read(slotID);
+    uint8_t toggle = 0; r.read(toggle);
+    uint16_t speed = 500; r.read(speed);
+
+    PlayerNametag& pn = g_Players[playerId];
+    if (slotID == -1) {
+        pn.isNametagRainbow = (toggle != 0);
+        pn.nametagRainbowSpeedMs = speed;
+    } else if (slotID >= 0 && slotID < kMaxRoleSlots) {
+        pn.slots[slotID].isRainbow = (toggle != 0);
+        pn.slots[slotID].rainbowSpeedMs = speed;
+    }
+}
+
+static void ParseNametagColor(const uint8_t* data, uint32_t len) {
+    PacketReader r{ data, len };
+    uint8_t  pktId   = 0; r.read(pktId);
+    uint16_t playerId = 0;
+    if (!r.read(playerId) || playerId >= (uint16_t)kMaxPlayers) return;
+
+    uint32_t color = 0;
+    if (!r.read(color)) return;
+
+    PlayerNametag& pn = g_Players[playerId];
+    pn.nametagColor = color;
+    pn.hasCustomNametagColor = true;
+}
+
+static void ParseSetVisibility(const uint8_t* data, uint32_t len) {
+    PacketReader r{ data, len };
+    uint8_t  pktId   = 0; r.read(pktId);
+    uint16_t playerId = 0;
+    if (!r.read(playerId) || playerId >= (uint16_t)kMaxPlayers) return;
+
+    uint8_t visible = 1;
+    if (!r.read(visible)) return;
+
+    PlayerNametag& pn = g_Players[playerId];
+    pn.visible = (visible != 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -231,7 +250,7 @@ static RakPacket* __fastcall hkReceive(void* pRak, void* edx) {
         case Network::kPktNametagData:
             ParseNametagData(pkt->data, pkt->length);
             DeallocateRakPacket(pRak, pkt);
-            return NULL; // Hide packet from SAMP
+            return NULL;
 
         case Network::kPktPresetRole:
             ParsePresetRole(pkt->data, pkt->length);
@@ -245,6 +264,21 @@ static RakPacket* __fastcall hkReceive(void* pRak, void* edx) {
 
         case Network::kPktSetRoleByName:
             ParseRoleByName(pkt->data, pkt->length);
+            DeallocateRakPacket(pRak, pkt);
+            return NULL;
+
+        case Network::kPktSetRainbow:
+            ParseSetRainbow(pkt->data, pkt->length);
+            DeallocateRakPacket(pRak, pkt);
+            return NULL;
+
+        case Network::kPktNametagColor:
+            ParseNametagColor(pkt->data, pkt->length);
+            DeallocateRakPacket(pRak, pkt);
+            return NULL;
+
+        case Network::kPktSetVisibility:
+            ParseSetVisibility(pkt->data, pkt->length);
             DeallocateRakPacket(pRak, pkt);
             return NULL;
 

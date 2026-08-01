@@ -1,6 +1,7 @@
 /**
  * @file Nametag.cpp
- * @brief Render nametag động cho tất cả player mỗi frame.
+ * @brief Render nametag động cho tất cả player mỗi frame bằng Direct3D 9 Engine.
+ * Hỗ trợ tối đa 10 Multi-Slot (Tự phân dòng khi quá dài), Rainbow Effects, Custom Nametag Color và Undercover Mode.
  */
 #include "pch.h"
 #include "Nametag.h"
@@ -13,6 +14,7 @@
 #include <sampapi/0.3.DL-1/CNetGame.h>
 #include <sampapi/0.3.DL-1/CPlayerTags.h>
 #include <cmath>
+#include <vector>
 
 #pragma comment(lib, "d3d9.lib")
 #pragma comment(lib, "d3dx9.lib")
@@ -23,13 +25,13 @@ using namespace sampapi::v03dl;
 // Layout constants
 // ---------------------------------------------------------------------------
 
-constexpr D3DCOLOR kColorName          = D3DCOLOR_ARGB(255, 255, 255, 255); ///< Tên màu trắng
-constexpr D3DCOLOR kColorNameStroke    = D3DCOLOR_ARGB(255,   0,   0,   0); ///< Stroke đen
-constexpr D3DCOLOR kColorTagText       = D3DCOLOR_ARGB(255, 255, 255, 255); ///< Text badge trắng
-constexpr D3DCOLOR kColorTagStroke     = D3DCOLOR_ARGB(255,   0,   0,   0); ///< Stroke badge
-constexpr D3DCOLOR kColorHpFill        = D3DCOLOR_ARGB(255, 210,  30,  30); ///< Đỏ HP
-constexpr D3DCOLOR kColorArmourFill    = D3DCOLOR_ARGB(255, 180, 180, 180); ///< Bạc Armour
-constexpr D3DCOLOR kColorBarBg         = D3DCOLOR_ARGB(200,   0,   0,   0); ///< Nền bar
+constexpr D3DCOLOR kColorNameDefault    = D3DCOLOR_ARGB(255, 255, 255, 255);
+constexpr D3DCOLOR kColorNameStroke     = D3DCOLOR_ARGB(255,   0,   0,   0);
+constexpr D3DCOLOR kColorTagTextDefault = D3DCOLOR_ARGB(255, 255, 255, 255);
+constexpr D3DCOLOR kColorTagStroke      = D3DCOLOR_ARGB(255,   0,   0,   0);
+constexpr D3DCOLOR kColorHpFill         = D3DCOLOR_ARGB(255, 210,  30,  30);
+constexpr D3DCOLOR kColorArmourFill     = D3DCOLOR_ARGB(255, 180, 180, 180);
+constexpr D3DCOLOR kColorBarBg          = D3DCOLOR_ARGB(200,   0,   0,   0);
 
 constexpr float kGap       = 6.f;  ///< Khoảng cách dọc giữa các hàng (px)
 constexpr float kTagPadX   = 8.f;  ///< Padding ngang trong tag badge
@@ -37,8 +39,6 @@ constexpr float kTagH      = 18.f; ///< Chiều cao cố định của tag badge
 constexpr float kTagGap    = 5.f;  ///< Khoảng cách ngang giữa các tag
 constexpr float kBarW      = 160.f;///< Chiều rộng progress bar
 constexpr float kBarH      = 9.f;  ///< Chiều cao progress bar
-constexpr UINT  kBoneHead  = 8;    ///< Bone ID đầu player (GTA SA)
-constexpr float kHeadOffZ  = 0.55f;///< Offset Z lên trên đầu (tăng khoảng cách tránh dính đầu)
 
 // ---------------------------------------------------------------------------
 // D3D resources
@@ -57,42 +57,36 @@ static bool         s_Ready         = false;
 // Internal draw helpers
 // ---------------------------------------------------------------------------
 
-/**
- * @brief Vẽ 1 tag badge với kích thước co giãn theo distance scale.
- */
-/**
- * @brief Vẽ 1 tag badge bo tròn góc với kích thước co giãn theo distance scale.
- */
-static float DrawTag(IDirect3DDevice9* dev, float x, float y, float scale, const RoleTag& tag) {
+static float DrawSingleTag(IDirect3DDevice9* dev, float x, float y, float scale, const RoleSlotClientData& slot) {
     ID3DXFont* font = (scale < 0.75f) ? s_FontTagSmall : s_FontTag;
-    SIZE sz = D3DHelper::MeasureText(font, tag.text.c_str());
+    SIZE sz = D3DHelper::MeasureText(font, slot.text.c_str());
 
     float tagPadX = kTagPadX * scale;
     float tagH    = kTagH * scale;
     float tagW    = static_cast<float>(sz.cx) + tagPadX * 2.f;
     float radius  = 4.f * scale;
 
-    D3DHelper::DrawRoundedFilledRect(dev, x, y, tagW, tagH, radius, tag.color);
+    D3DCOLOR badgeColor = slot.isRainbow ? GetRainbowD3DColor(slot.currentHue) : (slot.color != 0 ? slot.color : D3DCOLOR_ARGB(255, 50, 50, 50));
+    D3DCOLOR bgColor    = slot.bgColor != 0 ? slot.bgColor : badgeColor;
+
+    D3DHelper::DrawRoundedFilledRect(dev, x, y, tagW, tagH, radius, bgColor);
     D3DHelper::DrawRoundedBorderRect(dev, x, y, tagW, tagH, radius, 1.f, kColorTagStroke);
 
     RECT r = { (LONG)x, (LONG)y, (LONG)(x + tagW), (LONG)(y + tagH) };
-    if (tag.stroke) {
-        D3DHelper::DrawTextStroke(font, tag.text.c_str(), r,
+    if (slot.stroke) {
+        D3DHelper::DrawTextStroke(font, slot.text.c_str(), r,
             DT_CENTER | DT_VCENTER | DT_SINGLELINE,
-            kColorTagText, kColorTagStroke);
+            kColorTagTextDefault, kColorTagStroke);
     } else {
-        font->DrawTextA(NULL, tag.text.c_str(), -1, &r,
-            DT_CENTER | DT_VCENTER | DT_SINGLELINE, kColorTagText);
+        font->DrawTextA(NULL, slot.text.c_str(), -1, &r,
+            DT_CENTER | DT_VCENTER | DT_SINGLELINE, kColorTagTextDefault);
     }
 
     return tagW;
 }
 
-/**
- * @brief Vẽ PNG Image texture (tự scale theo targetW x targetH).
- */
-static void DrawIcon(IDirect3DDevice9* dev, float x, float y, float targetW, float targetH, const std::string& url) {
-    LPDIRECT3DTEXTURE9 tex = TextureCache::GetOrLoad(dev, url);
+static void DrawIconTexture(IDirect3DDevice9* dev, float x, float y, float targetW, float targetH, const std::string& pathOrUrl) {
+    LPDIRECT3DTEXTURE9 tex = TextureCache::GetOrLoad(dev, pathOrUrl);
     if (!tex) return;
 
     D3DSURFACE_DESC desc;
@@ -113,41 +107,36 @@ static void DrawIcon(IDirect3DDevice9* dev, float x, float y, float targetW, flo
     s_Sprite->End();
 }
 
-/**
- * @brief Vẽ hàng tag + icon với tỉ lệ scale theo khoảng cách (hỗ trợ tối đa 3 role mỗi hàng).
- */
-struct BadgeItem {
-    float width;
-    float height;
-    std::string imgPath;
-    int tagIndex;
+struct RenderSlotItem {
+    float width = 0.f;
+    float height = 0.f;
+    int slotIndex = 0;
 };
 
 /**
- * @brief Vẽ hàng tag + icon với tỉ lệ scale theo khoảng cách (tự động rớt xuống tầng mới nếu vượt quá độ rộng).
+ * @brief Vẽ tối đa 10 Role Badges, tự động xuống dòng (Tầng / Multi-row) khi độ rộng vượt quá maxRowW.
  */
-static float DrawTagRow(IDirect3DDevice9* dev, float centerX, float y, float scale, const PlayerNametag& pn) {
-    if (pn.tagCount == 0 && pn.iconUrl.empty()) return 0.f;
+static float DrawMultiSlotRow(IDirect3DDevice9* dev, float centerX, float y, float scale, const PlayerNametag& pn) {
+    std::vector<RenderSlotItem> items;
 
     ID3DXFont* font = (scale < 0.75f) ? s_FontTagSmall : s_FontTag;
     float tagPadX = kTagPadX * scale;
     float tagH    = 20.f * scale;
-    float badgeH  = 28.f * scale;
+    float badgeH  = 26.f * scale;
     float tagGap  = kTagGap * scale;
-    float maxRowW = 240.f * scale; // Giới hạn chiều rộng tối đa mỗi tầng
+    float rowGap  = kGap * scale;
+    float maxRowW = 240.f * scale; // Chiều rộng tối đa mỗi tầng trước khi phân dòng
 
-    int activeTags = (pn.tagCount < kMaxTagsPerPlayer) ? (int)pn.tagCount : kMaxTagsPerPlayer;
+    for (int s = 0; s < kMaxRoleSlots; ++s) {
+        const auto& slot = pn.slots[s];
+        if (!slot.active) continue;
 
-    std::vector<BadgeItem> items;
-    for (int t = 0; t < activeTags; t++) {
-        BadgeItem item;
-        item.tagIndex = t;
-        item.imgPath = pn.tags[t].imagePath;
+        RenderSlotItem item;
+        item.slotIndex = s;
         item.height = tagH;
-        item.width = 0.f;
 
-        if (!item.imgPath.empty()) {
-            LPDIRECT3DTEXTURE9 tex = TextureCache::GetOrLoad(dev, item.imgPath);
+        if (!slot.imagePath.empty()) {
+            LPDIRECT3DTEXTURE9 tex = TextureCache::GetOrLoad(dev, slot.imagePath);
             if (tex) {
                 D3DSURFACE_DESC desc;
                 tex->GetLevelDesc(0, &desc);
@@ -159,18 +148,22 @@ static float DrawTagRow(IDirect3DDevice9* dev, float centerX, float y, float sca
             }
         }
 
-        if (item.width <= 0.f) {
-            SIZE s = D3DHelper::MeasureText(font, pn.tags[t].text.c_str());
-            item.width = static_cast<float>(s.cx) + tagPadX * 2.f;
+        if (item.width <= 0.f && !slot.text.empty()) {
+            SIZE sz = D3DHelper::MeasureText(font, slot.text.c_str());
+            item.width = static_cast<float>(sz.cx) + tagPadX * 2.f;
             item.height = tagH;
         }
 
-        items.push_back(item);
+        if (item.width > 0.f) {
+            items.push_back(item);
+        }
     }
 
-    // Tách items thành các hàng (Rows / Tầng) nếu vượt quá chiều rộng
-    std::vector<std::vector<BadgeItem>> rows;
-    std::vector<BadgeItem> currentRow;
+    if (items.empty()) return 0.f;
+
+    // Tự động phân dòng (Tầng / Rows) khi tổng width vượt quá maxRowW
+    std::vector<std::vector<RenderSlotItem>> rows;
+    std::vector<RenderSlotItem> currentRow;
     float currentW = 0.f;
 
     for (const auto& item : items) {
@@ -188,35 +181,36 @@ static float DrawTagRow(IDirect3DDevice9* dev, float centerX, float y, float sca
         rows.push_back(currentRow);
     }
 
-    // Vẽ từng tầng (Row)
+    // Render từng tầng từ trên xuống
     float curY = y;
     float totalHeight = 0.f;
 
-    for (size_t r = 0; r < rows.size(); r++) {
+    for (size_t r = 0; r < rows.size(); ++r) {
         const auto& row = rows[r];
         float rowW = 0.f;
         float maxH = tagH;
 
-        for (size_t i = 0; i < row.size(); i++) {
+        for (size_t i = 0; i < row.size(); ++i) {
             if (i > 0) rowW += tagGap;
             rowW += row[i].width;
             if (row[i].height > maxH) maxH = row[i].height;
         }
 
-        float x = centerX - rowW * 0.5f;
+        float curX = centerX - rowW * 0.5f;
 
         for (const auto& item : row) {
-            if (item.height == badgeH && !item.imgPath.empty()) {
-                DrawIcon(dev, x, curY, item.width, badgeH, item.imgPath);
-            } else {
+            const auto& slot = pn.slots[item.slotIndex];
+            if (item.height == badgeH && !slot.imagePath.empty()) {
+                DrawIconTexture(dev, curX, curY, item.width, badgeH, slot.imagePath);
+            } else if (!slot.text.empty()) {
                 float tagY = curY + (maxH > tagH ? (maxH - tagH) * 0.5f : 0.f);
-                DrawTag(dev, x, tagY, scale, pn.tags[item.tagIndex]);
+                DrawSingleTag(dev, curX, tagY, scale, slot);
             }
-            x += item.width + tagGap;
+            curX += item.width + tagGap;
         }
 
-        curY += maxH + (kGap * scale);
-        totalHeight += maxH + (r + 1 < rows.size() ? (kGap * scale) : 0.f);
+        curY += maxH + rowGap;
+        totalHeight += maxH + (r + 1 < rows.size() ? rowGap : 0.f);
     }
 
     return totalHeight;
@@ -232,6 +226,8 @@ static void RenderOne(IDirect3DDevice9* dev,
     float hp, float armour,
     const PlayerNametag& pn)
 {
+    if (!pn.visible) return;
+
     float cy   = topY;
     float gap  = kGap * scale;
     float barW = kBarW * scale;
@@ -239,39 +235,42 @@ static void RenderOne(IDirect3DDevice9* dev,
 
     ID3DXFont* fontName = (scale < 0.75f) ? s_FontNameSmall : s_FontName;
 
-    // ── Hàng 1: Role Badges (PNG Image + up to 3 Text Badges) ────────────────
-    float rowH = DrawTagRow(dev, centerX, cy, scale, pn);
+    // ── Hàng 1: Multi-Slot Role Badges (Up to 10 Slots - Auto Multi-Row) ──────
+    float rowH = DrawMultiSlotRow(dev, centerX, cy, scale, pn);
     if (rowH > 0.f) cy += rowH + gap;
 
-    // ── Hàng 2: Tên & ID dạng: {name} ({id}) (Màu trắng + stroke 8 hướng) ────
+    // ── Hàng 2: Tên & ID ───────────────────────────────────────────────────
     char nameWithId[128];
     sprintf_s(nameWithId, "%s (%d)", name, id);
+
+    D3DCOLOR nameColor = kColorNameDefault;
+    if (pn.isNametagRainbow) {
+        nameColor = GetRainbowD3DColor(pn.nametagRainbowHue);
+    } else if (pn.hasCustomNametagColor) {
+        nameColor = pn.nametagColor;
+    }
 
     SIZE nameSz = D3DHelper::MeasureText(fontName, nameWithId);
     {
         float nx = centerX - nameSz.cx * 0.5f;
-        RECT r = { (LONG)nx, (LONG)cy,
-                   (LONG)(nx + nameSz.cx + 2), (LONG)(cy + nameSz.cy) };
-        D3DHelper::DrawTextStroke(fontName, nameWithId, r,
-            DT_LEFT | DT_NOCLIP, kColorName, kColorNameStroke);
+        RECT r = { (LONG)nx, (LONG)cy, (LONG)(nx + nameSz.cx + 2), (LONG)(cy + nameSz.cy) };
+        D3DHelper::DrawTextStroke(fontName, nameWithId, r, DT_LEFT | DT_NOCLIP, nameColor, kColorNameStroke);
         cy += static_cast<float>(nameSz.cy) + gap;
     }
 
-    // ── Hàng 3: Progress Bar Máu (HP) bo tròn góc ───────────────────────────
+    // ── Hàng 3: Progress Bar Máu ───────────────────────────────────────────
     {
         float bx = centerX - barW * 0.5f;
         float barRadius = 3.f * scale;
-        D3DHelper::DrawProgressBar(dev, bx, cy, barW, barH, barRadius,
-            hp, kColorBarBg, kColorHpFill);
+        D3DHelper::DrawProgressBar(dev, bx, cy, barW, barH, barRadius, hp, kColorBarBg, kColorHpFill);
         cy += barH + gap;
     }
 
-    // ── Hàng 4: Progress Bar Giáp (Armour) bo tròn góc (chỉ hiện khi Armour > 0) ──
+    // ── Hàng 4: Progress Bar Giáp ──────────────────────────────────────────
     if (armour > 0.f) {
         float bx = centerX - barW * 0.5f;
         float barRadius = 3.f * scale;
-        D3DHelper::DrawProgressBar(dev, bx, cy, barW, barH, barRadius,
-            armour, kColorBarBg, kColorArmourFill);
+        D3DHelper::DrawProgressBar(dev, bx, cy, barW, barH, barRadius, armour, kColorBarBg, kColorArmourFill);
         cy += barH + gap;
     }
 }
@@ -285,13 +284,13 @@ void Nametag::Init(IDirect3DDevice9* dev) {
 
     Release();
 
-    HRESULT h1 = D3DXCreateFontA(dev, 18, 0, FW_BOLD,   1, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, "Arial", &s_FontName);
-    HRESULT h2 = D3DXCreateFontA(dev, 14, 0, FW_BOLD,   1, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, "Arial", &s_FontInfo);
-    HRESULT h3 = D3DXCreateFontA(dev, 10, 0, FW_BOLD,   1, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, "Arial", &s_FontTag);
+    HRESULT h1 = D3DXCreateFontA(dev, 18, 0, FW_BOLD, 1, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, "Arial", &s_FontName);
+    HRESULT h2 = D3DXCreateFontA(dev, 14, 0, FW_BOLD, 1, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, "Arial", &s_FontInfo);
+    HRESULT h3 = D3DXCreateFontA(dev, 10, 0, FW_BOLD, 1, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, "Arial", &s_FontTag);
     
-    HRESULT h1s = D3DXCreateFontA(dev, 13, 0, FW_BOLD,   1, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, "Arial", &s_FontNameSmall);
-    HRESULT h2s = D3DXCreateFontA(dev, 11, 0, FW_BOLD,   1, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, "Arial", &s_FontInfoSmall);
-    HRESULT h3s = D3DXCreateFontA(dev,  8, 0, FW_BOLD,   1, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, "Arial", &s_FontTagSmall);
+    HRESULT h1s = D3DXCreateFontA(dev, 13, 0, FW_BOLD, 1, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, "Arial", &s_FontNameSmall);
+    HRESULT h2s = D3DXCreateFontA(dev, 11, 0, FW_BOLD, 1, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, "Arial", &s_FontInfoSmall);
+    HRESULT h3s = D3DXCreateFontA(dev,  8, 0, FW_BOLD, 1, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, "Arial", &s_FontTagSmall);
 
     HRESULT h4 = D3DXCreateSprite(dev, &s_Sprite);
 
@@ -323,20 +322,14 @@ void Nametag::RenderAll(IDirect3DDevice9* dev) {
     if (!s_Ready || !pNet) return;
     CPlayerPool* pPool = pNet->GetPlayerPool(); if (!pPool) return;
 
-    // KIỂM TRA PLAYER LOCAL ĐÃ SPAWN CHƯA — KHÔNG RENDER NẾU CHƯA SPAWN
     CLocalPlayer* pLocalPlayer = pPool->GetLocalPlayer();
     if (!pLocalPlayer || !pLocalPlayer->m_bIsActive) return;
 
     TextureCache::FlushPending(dev);
 
-    D3DVIEWPORT9 vp;
-    dev->GetViewport(&vp);
-
-    SAMPVersionInfo vInfo = SAMPVersionInfo::Get();
     const sampapi::ID localId = pPool->m_nLocalPlayerId;
-    const float maxDrawDist = RoleConfig::GetDrawDistance(); // Mặc định 40.0m từ JSON
+    const float maxDrawDist = RoleConfig::GetDrawDistance();
 
-    // Tọa độ người chơi local để tính khoảng cách
     sampapi::CVector localPos{0.f, 0.f, 0.f};
     auto ppLocalPed = reinterpret_cast<void**>(0xB7CD98);
     if (ppLocalPed && !IsBadReadPtr(ppLocalPed, sizeof(void*)) && *ppLocalPed && !IsBadReadPtr(*ppLocalPed, 0x600)) {
@@ -348,89 +341,52 @@ void Nametag::RenderAll(IDirect3DDevice9* dev) {
         }
     }
 
-    for (int i = 0; i < kMaxPlayers; i++) {
-        void* pGamePed = nullptr;
-        const char* name = nullptr;
-        float hp = 100.f;
-        float armour = 0.f;
-        int ping = 0;
-
-        if (i == localId) {
-            if (ppLocalPed && !IsBadReadPtr(ppLocalPed, sizeof(void*)) && *ppLocalPed && !IsBadReadPtr(*ppLocalPed, 0x600)) {
-                pGamePed = *ppLocalPed;
-            }
-            if (vInfo.fnGetLocalPlayerName)
-                name = reinterpret_cast<const char*(__thiscall*)(void*)>(vInfo.fnGetLocalPlayerName)(pPool);
-            if (vInfo.fnGetLocalPlayerPing)
-                ping = reinterpret_cast<int(__thiscall*)(void*)>(vInfo.fnGetLocalPlayerPing)(pPool);
-        } else {
-            if (!pPool->IsConnected(i)) continue;
-            CRemotePlayer* pPlayer = pPool->GetPlayer(i);
-            if (!pPlayer || IsBadReadPtr(pPlayer, sizeof(void*))) continue;
-
-            // KIỂM TRA REMOTE PLAYER ĐÃ SPAWN CHƯA (m_nState != 0 (PLAYER_STATE_NONE))
-            if (pPlayer->m_nState == 0) continue;
-
-            pPlayer->m_bDrawLabels = FALSE;
-
-            if (pPlayer->m_pPed && !IsBadReadPtr(pPlayer->m_pPed, sizeof(void*))) {
-                pGamePed = pPlayer->m_pPed->m_pGamePed;
-            }
-
-            if (vInfo.fnGetName)
-                name = reinterpret_cast<const char*(__thiscall*)(void*, int)>(vInfo.fnGetName)(pPool, i);
-            if (vInfo.fnGetPing)
-                ping = reinterpret_cast<int(__thiscall*)(void*, int)>(vInfo.fnGetPing)(pPool, i);
+    for (int i = 0; i < kMaxPlayers; ++i) {
+        auto& pn = g_Players[i];
+        if (pn.isNametagRainbow) {
+            pn.nametagRainbowHue = std::fmod(pn.nametagRainbowHue + 3.0f, 360.0f);
         }
-
-        if (!pGamePed || IsBadReadPtr(pGamePed, 0x600)) continue;
-
-        hp = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(pGamePed) + 0x540);
-        armour = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(pGamePed) + 0x548);
-        if (hp <= 0.0f) continue; // KHÔNG RENDER NẾU ĐÃ CHẾT / CHƯA HỒI SINH
-
-        sampapi::CVector headPos{0.f, 0.f, 0.f};
-        bool boneSuccess = false;
-
-        reinterpret_cast<void(__thiscall*)(void*, sampapi::CVector*, int, bool)>(0x5E4280)(
-            pGamePed, &headPos, kBoneHead, true);
-        if (headPos.z > 0.1f) {
-            boneSuccess = true;
-        }
-
-        if (!boneSuccess) {
-            uintptr_t transform = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(pGamePed) + 0x14);
-            if (transform && !IsBadReadPtr(reinterpret_cast<void*>(transform), 0x40)) {
-                headPos.x = *reinterpret_cast<float*>(transform + 0x30);
-                headPos.y = *reinterpret_cast<float*>(transform + 0x34);
-                headPos.z = *reinterpret_cast<float*>(transform + 0x38) + 0.8f;
-            } else {
-                headPos.x = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(pGamePed) + 0x4);
-                headPos.y = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(pGamePed) + 0x8);
-                headPos.z = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(pGamePed) + 0xC) + 0.8f;
+        for (int s = 0; s < kMaxRoleSlots; ++s) {
+            if (pn.slots[s].active && pn.slots[s].isRainbow) {
+                pn.slots[s].currentHue = std::fmod(pn.slots[s].currentHue + 3.0f, 360.0f);
             }
         }
-        headPos.z += kHeadOffZ;
+    }
 
-        // TÍNH KHOẢNG CÁCH D3D VỚI PLAYER LOCAL & FILTER DRAW_DISTANCE
-        float dx = headPos.x - localPos.x;
-        float dy = headPos.y - localPos.y;
-        float dz = headPos.z - localPos.z;
-        float dist = sqrtf(dx * dx + dy * dy + dz * dz);
+    for (sampapi::ID i = 0; i < kMaxPlayers; ++i) {
+        if (i == localId) continue;
+        if (!pPool->m_bNotEmpty[i]) continue;
 
-        if (dist > maxDrawDist) continue; // KHÔNG RENDER NẾU QUÁ KHOẢNG CÁCH CẤU HÌNH JSON
+        CRemotePlayer* pRemote = pPool->GetPlayer(i);
+        if (!pRemote || !pRemote->m_pPed) continue;
 
-        // CÀNG XA NAMETAG CÀNG NHỎ (Scale từ 1.0f xuống 0.45f theo khoảng cách)
-        float scale = 1.0f - (dist / maxDrawDist) * 0.55f;
-        if (scale < 0.45f) scale = 0.45f;
-        if (scale > 1.0f) scale = 1.0f;
+        sampapi::v03dl::CPed* pPed = pRemote->m_pPed;
+        if (!pPed->m_pGamePed) continue;
 
-        float sx = 0.f, sy = 0.f;
-        if (!W2S::ToScreen(headPos, sx, sy)) continue;
+        sampapi::CVector bonePos{0.f, 0.f, 0.f};
+        pPed->GetBonePosition(8, &bonePos);
+        sampapi::CVector worldPos = (bonePos.z > 0.f) ? bonePos : pRemote->m_onfootTargetPosition;
+        worldPos.z += 0.55f;
 
-        const char* displayName = (name && strlen(name) > 0) ? name : "Unknown";
-        const PlayerNametag& pn = g_Players[i];
+        float dx = worldPos.x - localPos.x;
+        float dy = worldPos.y - localPos.y;
+        float dz = worldPos.z - localPos.z;
+        float dist = std::sqrt(dx * dx + dy * dy + dz * dz);
+        if (dist > maxDrawDist) continue;
 
-        RenderOne(dev, sx, sy, scale, displayName, i, ping, hp, armour, pn);
+        float screenX = 0.f, screenY = 0.f;
+        if (!W2S::ToScreen(worldPos, screenX, screenY)) continue;
+
+        float scale = 1.f - (dist / maxDrawDist) * 0.45f;
+        if (scale < 0.55f) scale = 0.55f;
+
+        const char* name = pPool->GetName(i);
+        if (!name || name[0] == '\0') name = "Player";
+
+        int ping = pPool->GetPing(i);
+        float hp = pPed->GetHealth();
+        float armour = pPed->GetArmour();
+
+        RenderOne(dev, screenX, screenY, scale, name, i, ping, hp, armour, g_Players[i]);
     }
 }

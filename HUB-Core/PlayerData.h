@@ -1,55 +1,81 @@
 /**
  * @file PlayerData.h
- * @brief Dữ liệu nametag động của mỗi player, nhận từ server qua RakNet.
- *
- * Server gửi packet 220 chứa:
- *   - URL ảnh icon (tải async, không lag game)
- *   - Tối đa 2 RoleTag, mỗi tag gồm: text, màu ARGB, có stroke hay không
- *
- * Thread-safety:
- *   g_Players[] được ghi bởi Network::hkReceive (game main thread)
- *   và đọc bởi Nametag::RenderAll (render thread = cùng main thread GTA SA).
- *   Không cần mutex.
+ * @brief Dữ liệu nametag động của mỗi player trên Client ASI (Direct3D 9 Engine).
+ * Hỗ trợ 10 Multi-Slot (Auto Line Wrap), Rainbow Effects, Custom Nametag Color, Visibility Toggle.
  */
 #pragma once
 #include <string>
 #include <array>
 #include <d3d9.h>
+#include <cmath>
 
-/// Số player tối đa trong SAMP
+/// Số player tối đa trong SAMP / open:mp
 constexpr int kMaxPlayers = 1004;
 
-/// Số tag tối đa hiển thị trên một nametag (tối đa 5 roles mỗi hàng)
-constexpr int kMaxTagsPerPlayer = 5;
-
-// ---------------------------------------------------------------------------
+/// Số slot role tối đa hiển thị cùng lúc (Tối đa 10 Slots, tự động phân dòng khi dài)
+constexpr int kMaxRoleSlots = 10;
 
 /**
- * @brief Một role tag hiển thị trên nametag.
- *
- * Ví dụ server Pawn gửi:
- *   tag[0] = { "ADMIN", 0xFFB30000, stroke=true  }
- *   tag[1] = { "VIP",   0xFFCC9900, stroke=false }
+ * @brief Dữ liệu hiển thị Role Badge tại 1 Slot.
  */
-struct RoleTag {
-    std::string text;           ///< Nội dung badge (vd: "ADMIN", "VIP", "MOD")
-    D3DCOLOR    color  = 0;     ///< Màu nền badge dạng ARGB (0xAARRGGBB)
-    bool        stroke = false; ///< true = vẽ viền đen 8 hướng quanh text
-    std::string imagePath;      ///< Tệp ảnh PNG / JPG của Role (vd: "HUB-Core/icons/admin.png")
+struct RoleSlotClientData {
+    bool        active     = false;
+    std::string text;
+    D3DCOLOR    color      = 0;
+    D3DCOLOR    bgColor    = 0;
+    bool        stroke     = true;
+    std::string imagePath;
+
+    // Rainbow Effect per Slot
+    bool        isRainbow  = false;
+    uint32_t    rainbowSpeedMs = 500;
+    float       currentHue = 0.0f;
 };
 
 /**
- * @brief Toàn bộ dữ liệu nametag của 1 player, sync từ server.
+ * @brief Dữ liệu Nametag đầy đủ của 1 player trên Client.
  */
 struct PlayerNametag {
-    std::array<RoleTag, kMaxTagsPerPlayer> tags; ///< Danh sách tag (index 0-1)
-    int         tagCount = 0;    ///< Số tag thực tế server gửi (0-2)
-    std::string iconUrl;         ///< URL ảnh icon (rỗng = không hiển thị)
-    bool        hasData  = false;///< true sau khi nhận packet đầu tiên từ server
+    std::array<RoleSlotClientData, kMaxRoleSlots> slots;
+    
+    // Custom Nametag Color
+    D3DCOLOR    nametagColor = D3DCOLOR_ARGB(255, 255, 255, 255);
+    bool        hasCustomNametagColor = false;
+    
+    // Rainbow Effect cho Nametag chính
+    bool        isNametagRainbow = false;
+    uint32_t    nametagRainbowSpeedMs = 500;
+    float       nametagRainbowHue = 0.0f;
+
+    // Direct3D 9 Visibility Toggle (Undercover / Admin Duty)
+    bool        visible  = true;
+    bool        hasData  = false;
 };
 
-/// Global array, index = playerID (0–1003)
+/// Global array lưu trữ trạng thái người chơi, index = playerID (0–1003)
 inline std::array<PlayerNametag, kMaxPlayers> g_Players;
+
+/**
+ * @brief Helper đổi góc màu HSV sang D3DCOLOR (ARGB).
+ */
+inline D3DCOLOR GetRainbowD3DColor(float h, uint8_t alpha = 255) {
+    float c = 1.0f;
+    float x = c * (1.0f - std::fabs(std::fmod(h / 60.0f, 2.0f) - 1.0f));
+    float r = 0, g = 0, b = 0;
+
+    if (h >= 0 && h < 60)       { r = c; g = x; b = 0; }
+    else if (h >= 60 && h < 120){ r = x; g = c; b = 0; }
+    else if (h >= 120 && h < 180){ r = 0; g = c; b = x; }
+    else if (h >= 180 && h < 240){ r = 0; g = x; b = c; }
+    else if (h >= 240 && h < 300){ r = x; g = 0; b = c; }
+    else                        { r = c; g = 0; b = x; }
+
+    uint8_t R = static_cast<uint8_t>(r * 255.0f);
+    uint8_t G = static_cast<uint8_t>(g * 255.0f);
+    uint8_t B = static_cast<uint8_t>(b * 255.0f);
+
+    return D3DCOLOR_ARGB(alpha, R, G, B);
+}
 
 /**
  * @brief Xóa data của player (gọi khi player disconnect).

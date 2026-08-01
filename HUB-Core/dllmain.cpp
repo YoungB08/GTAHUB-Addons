@@ -1,188 +1,96 @@
 /**
  * @file dllmain.cpp
- * @brief DLL entry point và các patch core.
- *
- * Lu?ng kh?i d?ng:
- *  DLL_PROCESS_ATTACH
- *    +- MainThread (thread)
- *         +- PatchVehicleLimit()          — patch ngay khi samp.dll load
- *         +- Ch? SAMP init xong (state=9 ho?c PlayerTags ready)
- *         +- D3DHook::Install()           — hook EndScene
- *         +- Network::Init() + RequestRoles()
- *
- *  DLL_PROCESS_DETACH
- *    +- D3DHook::Uninstall()
- *    +- Network::Shutdown()
- *    +- Nametag::Release()
+ * @brief Entry point DLL cho client ASI GTA SA (HUB-Core.asi).
  */
 #include "pch.h"
-#include <windows.h>
-#include <psapi.h>
-
 #include "D3DHook.h"
-#include "Nametag.h"
 #include "Network.h"
 #include "PlayerData.h"
+#include "RoleConfig.h"
+#include "TextureCache.h"
 
-#include <sampapi/0.3.DL-1/CChat.h>
 #include <sampapi/0.3.DL-1/CNetGame.h>
 #include <sampapi/0.3.DL-1/CPlayerTags.h>
-
-#pragma comment(lib, "Ws2_32.lib")
+#include <sampapi/0.3.DL-1/CChat.h>
+#include <thread>
+#include <chrono>
 
 using namespace sampapi::v03dl;
 
-// ============================================================
-// Vehicle limit patch
-// Patch giới hạn 611 xe của SAMP lên 8000.
-// ============================================================
+#ifndef HUB_CORE_VERSION_STRING
+#define HUB_CORE_VERSION_STRING "4.0.0 (open:mp Multi-Slot Async)"
+#endif
 
-static DWORD FindPattern(HMODULE hMod, const char* pattern, size_t len) {
-    MODULEINFO info;
-    GetModuleInformation(GetCurrentProcess(), hMod, &info, sizeof(info));
-    auto base = reinterpret_cast<DWORD>(hMod);
-    for (DWORD i = base; i < base + info.SizeOfImage - len; ++i)
-        if (memcmp(reinterpret_cast<void*>(i), pattern, len) == 0) return i;
-    return 0;
-}
+static bool s_bSpawnMessageSent = false;
 
-static void PatchVehicleLimit() {
-    HMODULE hSamp = GetModuleHandleA("samp.dll");
-    if (!hSamp) return;
+static DWORD WINAPI MainThread(LPVOID lpParam) {
+    (void)lpParam;
+    Log("=================================================================");
+    Log("   GTAHUB Client Core (HUB-Core.asi v%s) Initializing...", HUB_CORE_VERSION_STRING);
+    Log("=================================================================");
 
-    // Pattern: CMP EAX, 0x190 ... CMP EAX, 0x263 (giới hạn 611 xe)
-    DWORD addr = FindPattern(hSamp,
-        "\x3D\x90\x01\x00\x00\x0F\x8C\x32\x01\x00\x00"
-        "\x3D\x63\x02\x00\x00\x0F\x8F\x27\x01\x00\x00", 22);
-    if (!addr) return;
-
-    // Patch hằng số 0x263 thành 8000
-    DWORD limitAddr = addr + 12; // offset dẫn DWORD của 0x263
-    DWORD newLimit  = 8000;
-    DWORD old;
-    VirtualProtect(reinterpret_cast<LPVOID>(limitAddr), 4,
-        PAGE_EXECUTE_READWRITE, &old);
-    memcpy(reinterpret_cast<void*>(limitAddr), &newLimit, 4);
-    VirtualProtect(reinterpret_cast<LPVOID>(limitAddr), 4, old, &old);
-}
-
-#include "RoleConfig.h"
-
-// ============================================================
-// Main thread
-// ============================================================
-
-static DWORD WINAPI MainThread(LPVOID) {
-    Log("MainThread started.");
     RoleConfig::InitDefaults();
 
     int loopCount = 0;
-    static bool s_bSpawnMessageSent = false;
-
     while (true) {
-        Sleep(500); 
+        std::this_thread::sleep_for(std::chrono::milliseconds(250));
         loopCount++;
 
-        CNetGame* pNetGame = GetRefNetGame();
-
-        // 1. Kiểm tra IP khi CNetGame đã sẵn sàng và HostAddress đã được ghi nhận
-        if (pNetGame && pNetGame->m_szHostAddress && strlen(pNetGame->m_szHostAddress) > 0) {
-            if (strcmp(pNetGame->m_szHostAddress, "127.0.0.1") != 0 && 
-                strcmp(pNetGame->m_szHostAddress, "26.42.80.113") != 0) {
-                
-                MessageBoxA(0, "Neu muon choi may chu khac hay xoa HUB-Core.asi", "GTAHUB-Dev", MB_OK | MB_ICONERROR);
-                Sleep(500);
-                ExitProcess(0);
-            }
-        }
-
-        auto ppDev = reinterpret_cast<IDirect3DDevice9**>(0xC97C28);
-        IDirect3DDevice9* dev = (ppDev && !IsBadReadPtr(ppDev, sizeof(void*)) && *ppDev && !IsBadReadPtr(*ppDev, sizeof(void*))) ? *ppDev : nullptr;
-
-        if (dev) {
-            // Cài/Cập nhật hook D3D bất cứ khi nào device thay đổi
-            D3DHook::Install(dev);
-
-            // Chờ có NetGame đã kết nối xong (GAME_MODE_CONNECTED = 5) mới hook Network
-            if (pNetGame && pNetGame->GetState() == 5 && !Network::IsReady()) {
-                Log("MainThread: Init Network with pNet %p (State=%d)", pNetGame, pNetGame->GetState());
-                Network::Init();
-            }
-        }
-
-        // 2. Gửi tin nhắn CChat và khởi tạo Test Roles khi người chơi Spawn vào game
-        if (pNetGame && pNetGame->GetPlayerPool()) {
-            CPlayerPool* pPlayerPool = pNetGame->GetPlayerPool();
-            CLocalPlayer* pLocalPlayer = pPlayerPool ? pPlayerPool->GetLocalPlayer() : nullptr;
-
-            if (pLocalPlayer && pLocalPlayer->m_bIsActive) {
-                if (!s_bSpawnMessageSent) {
-                    // Gửi request data cho Server sau khi đã kết nối và spawn xong
-                    if (Network::IsReady()) {
-                        Network::RequestData();
-                    }
-
-                    CChat* pChat = GetRefChat();
-                    if (pChat) {
-                        pChat->AddMessage(0x00FF00FF, "[HUB-Core] HUBCore.asi Version: " HUB_CORE_VERSION_STRING);
-                        pChat->AddMessage(0xFF3399FF, "[HUB-Core] Auto Test Roles initialized from HUB-Roles.json!");
-                        s_bSpawnMessageSent = true;
-                        Log("Sent spawn message to CChat: HUBCore.asi Version %s", HUB_CORE_VERSION_STRING);
-                    }
-
-                    // Tự động nạp FULL 5 PNG Role Badges từ HUB-Roles.json cho tất cả người chơi để test
-                    uint16_t localId = pPlayerPool->m_nLocalPlayerId;
-                    for (int id = 0; id < 20; id++) {
-                        RoleConfig::RolePresetConfig cfg1 = RoleConfig::GetPresetRoleConfig("ADMIN");
-                        RoleConfig::RolePresetConfig cfg2 = RoleConfig::GetPresetRoleConfig("VIP");
-                        RoleConfig::RolePresetConfig cfg3 = RoleConfig::GetPresetRoleConfig("MOD");
-                        RoleConfig::RolePresetConfig cfg4 = RoleConfig::GetPresetRoleConfig("HELPER");
-                        RoleConfig::RolePresetConfig cfg5 = RoleConfig::GetPresetRoleConfig("DEV");
-
-                        g_Players[id].tags[0] = { cfg1.text, cfg1.color, cfg1.stroke, cfg1.imagePath };
-                        g_Players[id].tags[1] = { cfg2.text, cfg2.color, cfg2.stroke, cfg2.imagePath };
-                        g_Players[id].tags[2] = { cfg3.text, cfg3.color, cfg3.stroke, cfg3.imagePath };
-                        g_Players[id].tags[3] = { cfg4.text, cfg4.color, cfg4.stroke, cfg4.imagePath };
-                        g_Players[id].tags[4] = { cfg5.text, cfg5.color, cfg5.stroke, cfg5.imagePath };
-                        g_Players[id].tagCount = 5;
-                        g_Players[id].hasData = true;
-                    }
-                    Log("Auto test full 5 PNG roles assigned to local player ID %d and slots 0-19", localId);
+        CNetGame* pNet = GetRefNetGame();
+        if (pNet) {
+            if (!D3DHook::IsInstalled()) {
+                sampapi::v03dl::CPlayerTags* pTags = sampapi::v03dl::RefPlayerTags();
+                if (pTags && pTags->m_pDevice) {
+                    D3DHook::Install(pTags->m_pDevice);
+                    Log("D3DHook installed successfully.");
                 }
-            } else {
-                // Reset flag nếu player chuyển trạng thái (chưa spawn / reconnect / back to class selection)
-                s_bSpawnMessageSent = false;
             }
-        }
 
-        if (loopCount % 20 == 0) {
-            Log("MainThread loop %d: dev=%p, D3DHookInstalled=%d, NetworkReady=%d",
-                loopCount, dev, (int)D3DHook::IsInstalled(), (int)Network::IsReady());
+            if (!Network::IsReady()) {
+                Network::Init();
+                if (Network::IsReady()) {
+                    Log("Network initialized.");
+                }
+            }
+
+            CPlayerPool* pPlayerPool = pNet->GetPlayerPool();
+            if (pPlayerPool) {
+                CLocalPlayer* pLocalPlayer = pPlayerPool->GetLocalPlayer();
+                if (pLocalPlayer && pLocalPlayer->m_bIsActive) {
+                    if (!s_bSpawnMessageSent) {
+                        if (Network::IsReady()) {
+                            Network::RequestData();
+                        }
+
+                        CChat* pChat = GetRefChat();
+                        if (pChat) {
+                            pChat->AddMessage(0x00FF00FF, "[HUB-Core] HUBCore.asi Version: " HUB_CORE_VERSION_STRING);
+                            s_bSpawnMessageSent = true;
+                            Log("Sent spawn message to CChat: HUBCore.asi Version %s", HUB_CORE_VERSION_STRING);
+                        }
+                    }
+                } else {
+                    s_bSpawnMessageSent = false;
+                }
+            }
         }
     }
 
     return 0;
 }
 
-// ============================================================
-// DllMain
-// ============================================================
-
-BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID) {
-    switch (reason) {
-    case DLL_PROCESS_ATTACH:
-        ClearLog();
-        Log("=== HUB-Core.asi v" HUB_CORE_VERSION_STRING " DLL_PROCESS_ATTACH ===");
-        DisableThreadLibraryCalls(hModule);
-        CreateThread(nullptr, 0, MainThread, nullptr, 0, nullptr);
-        break;
-
-    case DLL_PROCESS_DETACH:
-        Log("=== HUB-Core.asi DLL_PROCESS_DETACH ===");
-        D3DHook::Uninstall();
-        Network::Shutdown();
-        Nametag::Release();
-        break;
+BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved) {
+    (void)lpReserved;
+    switch (ul_reason_for_call) {
+        case DLL_PROCESS_ATTACH:
+            DisableThreadLibraryCalls(hModule);
+            CreateThread(NULL, 0, MainThread, NULL, 0, NULL);
+            break;
+        case DLL_PROCESS_DETACH:
+            Network::Shutdown();
+            D3DHook::Uninstall();
+            TextureCache::ReleaseAll();
+            break;
     }
     return TRUE;
 }

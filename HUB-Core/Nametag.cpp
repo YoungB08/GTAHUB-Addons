@@ -27,7 +27,7 @@ using namespace sampapi::v03dl;
 namespace {
 
 constexpr uintptr_t kGtaFrameCounterAddress = 0xB7CB4C;
-constexpr float kHeadOffsetZ = 0.55f;
+constexpr float kHeadOffsetZ = 0.45f;
 constexpr float kGap = 6.0f;
 constexpr float kTagGap = 5.0f;
 constexpr float kTagPaddingX = 8.0f;
@@ -160,10 +160,15 @@ float DrawTextBadge(IDirect3DDevice9* device, float x, float y, float scale,
     const float height = kTagHeight * scale;
     const float width = static_cast<float>(textSize.cx) + kTagPaddingX * scale * 2.0f;
     const float radius = 4.0f * scale;
-    const D3DCOLOR badgeColor = slot.isRainbow
-        ? GetRainbowD3DColor(slot.currentHue)
-        : (slot.color != 0 ? slot.color : D3DCOLOR_ARGB(255, 50, 50, 50));
-    const D3DCOLOR background = slot.bgColor != 0 ? slot.bgColor : badgeColor;
+    const D3DCOLOR badgeColor = slot.color != 0
+        ? slot.color
+        : D3DCOLOR_ARGB(255, 50, 50, 50);
+    const uint8_t backgroundAlpha = slot.bgColor != 0
+        ? static_cast<uint8_t>((slot.bgColor >> 24) & 0xFF)
+        : 255;
+    const D3DCOLOR background = slot.isRainbow
+        ? GetRainbowD3DColor(slot.currentHue, backgroundAlpha)
+        : (slot.bgColor != 0 ? slot.bgColor : badgeColor);
 
     D3DHelper::DrawRoundedFilledRect(device, x, y, width, height, radius, background);
     D3DHelper::DrawRoundedBorderRect(device, x, y, width, height, radius, 1.0f, kStrokeColor);
@@ -187,13 +192,14 @@ struct TexturedVertex2D {
 };
 constexpr DWORD kTextureFVF = D3DFVF_XYZRHW | D3DFVF_DIFFUSE | D3DFVF_TEX1;
 
-void DrawIcon(IDirect3DDevice9* device, float x, float y, float width, float height, IDirect3DTexture9* texture) {
+void DrawIcon(IDirect3DDevice9* device, float x, float y, float width, float height,
+    IDirect3DTexture9* texture, D3DCOLOR tint) {
     if (!device || !texture) return;
     TexturedVertex2D v[4] = {
-        { x,         y + height, 0.f, 1.f, 0xFFFFFFFF, 0.f, 1.f },
-        { x,         y,          0.f, 1.f, 0xFFFFFFFF, 0.f, 0.f },
-        { x + width, y + height, 0.f, 1.f, 0xFFFFFFFF, 1.f, 1.f },
-        { x + width, y,          0.f, 1.f, 0xFFFFFFFF, 1.f, 0.f },
+        { x,         y + height, 0.f, 1.f, tint, 0.f, 1.f },
+        { x,         y,          0.f, 1.f, tint, 0.f, 0.f },
+        { x + width, y + height, 0.f, 1.f, tint, 1.f, 1.f },
+        { x + width, y,          0.f, 1.f, tint, 1.f, 0.f },
     };
     device->SetTexture(0, texture);
     device->SetTextureStageState(0, D3DTSS_COLOROP,   D3DTOP_MODULATE);
@@ -281,7 +287,10 @@ float DrawBadges(IDirect3DDevice9* device, float centerX, float y, float scale,
             const RoleSlotClientData& slot = nametag.slots[item.slotIndex];
             const float itemY = currentY + (height - item.height) * 0.5f;
             if (item.texture) {
-                DrawIcon(device, currentX, itemY, item.width, item.height, item.texture);
+                const D3DCOLOR tint = slot.isRainbow
+                    ? GetRainbowD3DColor(slot.currentHue)
+                    : D3DCOLOR_ARGB(255, 255, 255, 255);
+                DrawIcon(device, currentX, itemY, item.width, item.height, item.texture, tint);
             } else {
                 DrawTextBadge(device, currentX, itemY, scale, slot);
             }
@@ -298,37 +307,119 @@ float DrawBadges(IDirect3DDevice9* device, float centerX, float y, float scale,
     return totalHeight;
 }
 
-void DrawPlayer(IDirect3DDevice9* device, float centerX, float topY, float scale,
+float MeasureBadgesHeight(IDirect3DDevice9* device, float scale, const PlayerNametag& nametag) {
+    const float textHeight = kTagHeight * scale;
+    const float iconHeight = 26.0f * scale;
+    ID3DXFont* font = SelectTagFont(scale);
+
+    std::vector<float> itemWidths;
+    std::vector<float> itemHeights;
+
+    for (int slotIndex = 0; slotIndex < kMaxRoleSlots; ++slotIndex) {
+        const RoleSlotClientData& slot = nametag.slots[slotIndex];
+        if (!slot.active) continue;
+
+        float w = 0.0f;
+        float h = textHeight;
+        if (!slot.imagePath.empty()) {
+            LPDIRECT3DTEXTURE9 tex = TextureCache::GetOrLoad(device, slot.imagePath);
+            if (tex) {
+                D3DSURFACE_DESC description{};
+                if (SUCCEEDED(tex->GetLevelDesc(0, &description)) && description.Height > 0) {
+                    h = iconHeight;
+                    w = iconHeight * static_cast<float>(description.Width) / description.Height;
+                }
+            }
+        }
+        if (w <= 0.0f && !slot.text.empty()) {
+            const std::wstring text = D3DHelper::Utf8ToWide(slot.text);
+            const SIZE size = D3DHelper::MeasureTextW(font, text.c_str());
+            w = static_cast<float>(size.cx) + kTagPaddingX * scale * 2.0f;
+            h = textHeight;
+        }
+        if (w > 0.0f) {
+            itemWidths.push_back(w);
+            itemHeights.push_back(h);
+        }
+    }
+
+    if (itemWidths.empty()) return 0.0f;
+
+    float currentW = 0.0f;
+    float maxRowH = textHeight;
+    float totalH = 0.0f;
+    int rowItemCount = 0;
+
+    for (size_t i = 0; i < itemWidths.size(); ++i) {
+        float testW = currentW + (rowItemCount > 0 ? kTagGap * scale : 0.0f) + itemWidths[i];
+        if (rowItemCount > 0 && testW > kMaxBadgeRowWidth * scale) {
+            totalH += maxRowH + kGap * scale;
+            currentW = 0.0f;
+            maxRowH = textHeight;
+            rowItemCount = 0;
+        }
+        currentW += (rowItemCount > 0 ? kTagGap * scale : 0.0f) + itemWidths[i];
+        maxRowH = (std::max)(maxRowH, itemHeights[i]);
+        rowItemCount++;
+    }
+    totalH += maxRowH;
+    return totalH;
+}
+
+void DrawPlayer(IDirect3DDevice9* device, float centerX, float bottomAnchorY, float scale,
     const char* name, int playerId, float health, float armour, const PlayerNametag& nametag)
 {
     if (!nametag.visible) return;
-
-    float currentY = topY;
-    const float gap = kGap * scale;
-    const float badgeHeight = DrawBadges(device, centerX, currentY, scale, nametag);
-    if (badgeHeight > 0.0f) currentY += badgeHeight + gap;
 
     char label[128] = {};
     sprintf_s(label, "%s (%d)", name, playerId);
     const std::wstring wideLabel = D3DHelper::Utf8ToWide(label);
     ID3DXFont* nameFont = SelectNameFont(scale);
     const SIZE labelSize = D3DHelper::MeasureTextW(nameFont, wideLabel.c_str());
+
+    const float gap = kGap * scale;
+    const float barWidth = kBarWidth * scale;
+    const float barHeight = kBarHeight * scale;
+
+    const float nameTextHeight = static_cast<float>(labelSize.cy);
+    const float healthBarHeight = barHeight;
+    const float armourBarHeight = (armour > 0.0f) ? (barHeight + gap) : 0.0f;
+
+    const float badgeHeight = MeasureBadgesHeight(device, scale, nametag);
+    const float badgeSectionHeight = (badgeHeight > 0.0f) ? (badgeHeight + gap) : 0.0f;
+
+    const float totalLayoutHeight = badgeSectionHeight + nameTextHeight + gap + healthBarHeight + armourBarHeight;
+
+    float currentY = bottomAnchorY - totalLayoutHeight;
+
+    // 1. Draw Badges
+    if (badgeHeight > 0.0f) {
+        DrawBadges(device, centerX, currentY, scale, nametag);
+        currentY += badgeSectionHeight;
+    }
+
+    // 2. Draw Name "Name (ID)"
     const D3DCOLOR color = nametag.isNametagRainbow
         ? GetRainbowD3DColor(nametag.nametagRainbowHue)
         : (nametag.hasCustomNametagColor ? nametag.nametagColor : kNameColor);
-    RECT labelRect = {static_cast<LONG>(centerX - labelSize.cx * 0.5f), static_cast<LONG>(currentY),
-        static_cast<LONG>(centerX + labelSize.cx * 0.5f + 2.0f), static_cast<LONG>(currentY + labelSize.cy)};
+    RECT labelRect = {
+        static_cast<LONG>(centerX - labelSize.cx * 0.5f),
+        static_cast<LONG>(currentY),
+        static_cast<LONG>(centerX + labelSize.cx * 0.5f + 2.0f),
+        static_cast<LONG>(currentY + labelSize.cy)
+    };
     D3DHelper::DrawTextStrokeW(nameFont, wideLabel.c_str(), labelRect, DT_LEFT | DT_NOCLIP, color, kStrokeColor);
-    currentY += static_cast<float>(labelSize.cy) + gap;
+    currentY += nameTextHeight + gap;
 
-    const float barWidth = kBarWidth * scale;
-    const float barHeight = kBarHeight * scale;
+    // 3. Draw Health Progress Bar
     const float barX = centerX - barWidth * 0.5f;
     D3DHelper::DrawProgressBar(device, barX, currentY, barWidth, barHeight,
         3.0f * scale, health, kBarBackground, kHealthColor);
-    currentY += barHeight + gap;
+    currentY += barHeight;
 
+    // 4. Draw Armour Progress Bar (if > 0)
     if (armour > 0.0f) {
+        currentY += gap;
         D3DHelper::DrawProgressBar(device, barX, currentY, barWidth, barHeight,
             3.0f * scale, armour, kBarBackground, kArmourColor);
     }

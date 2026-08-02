@@ -401,13 +401,13 @@ bool RoleComponent::setPlayerRainbowRole(int targetPlayer, bool toggle, int spee
 
     if (slotID == -1) {
         state.isNametagRainbow = toggle;
-        state.nametagRainbowSpeedMs = (speed_ms > 50) ? speed_ms : 500;
+        state.nametagRainbowSpeedMs = (speed_ms >= 50) ? speed_ms : 500;
         Logger::Info("[RAINBOW] SetPlayerRainbowRole: targetPlayer=%d, MainNametag=%d, speed=%dms",
                      targetPlayer, toggle ? 1 : 0, state.nametagRainbowSpeedMs);
     } else if (slotID >= 0 && slotID < MAX_ROLE_SLOTS) {
         auto& slot = state.slots[slotID];
         slot.isRainbow = toggle;
-        slot.rainbowSpeedMs = (speed_ms > 50) ? speed_ms : 500;
+        slot.rainbowSpeedMs = (speed_ms >= 50) ? speed_ms : 500;
         Logger::Info("[RAINBOW] SetPlayerRainbowRole: targetPlayer=%d, slotID=%d, toggle=%d, speed=%dms",
                      targetPlayer, slotID, toggle ? 1 : 0, slot.rainbowSpeedMs);
     } else {

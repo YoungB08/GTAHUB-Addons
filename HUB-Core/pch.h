@@ -9,17 +9,9 @@
 
 // add headers that you want to pre-compile here
 #include "framework.h"
-#include <d3d9.h>
-#include <d3dx9.h>
-#include <urlmon.h>
-#include <psapi.h>
 #include <string>
-#include <array>
 #include <vector>
-#include <map>
-#include <mutex>
 #include <thread>
 #include <algorithm>
 
 #endif //PCH_H
-

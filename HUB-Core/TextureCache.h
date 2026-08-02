@@ -1,125 +1,120 @@
-/**
- * @file TextureCache.h
- * @brief Async texture loader cho D3D9 (header-only).
- *
- * Luồng hoạt động:
- *  1. GetOrLoad(device, url) — lần đầu gọi: kích hoạt nạp tệp ngầm / local.
- *  2. Background thread dùng URLDownloadToCacheFileA tải file PNG/JPG/BMP/DDS về disk.
- *  3. Sau khi tải xong, path được đưa vào g_Pending (thread-safe).
- *  4. Mỗi frame, FlushPending(device) được gọi trên render thread để
- *     tạo IDirect3DTexture9* từ tệp bằng D3DXCreateTextureFromFileA.
- */
 #pragma once
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
+
+#include "RoleConfig.h"
+
 #include <d3d9.h>
 #include <d3dx9.h>
 #include <urlmon.h>
-#include <string>
-#include <map>
+#include <wrl/client.h>
+
 #include <mutex>
+#include <string>
 #include <thread>
-#include "RoleConfig.h"
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
 
 #pragma comment(lib, "urlmon.lib")
-#pragma comment(lib, "d3d9.lib")
-#pragma comment(lib, "d3dx9.lib")
 
 namespace TextureCache {
 
-/// Map url → texture đã tạo xong (chỉ đọc/ghi trên render thread)
-inline std::map<std::string, LPDIRECT3DTEXTURE9> g_Cache;
+using Microsoft::WRL::ComPtr;
 
-/// Map url → local file path (viết bởi download thread, đọc bởi render thread)
-inline std::map<std::string, std::string> g_Pending;
-
-/// Bảo vệ g_Pending
+inline std::unordered_map<std::string, ComPtr<IDirect3DTexture9>> g_Cache;
+inline std::unordered_map<std::string, std::string> g_Pending;
+inline std::unordered_set<std::string> g_Loading;
+inline std::vector<std::thread> g_Workers;
 inline std::mutex g_Mutex;
 
-/// Set url đang được download (tránh gọi 2 thread cho cùng 1 url)
-inline std::map<std::string, bool> g_Downloading;
+inline void QueueLocalPath(const std::string& key, const std::string& path) {
+    std::lock_guard<std::mutex> guard(g_Mutex);
+    g_Pending[key] = path;
+    g_Loading.erase(key);
+}
 
-// ---------------------------------------------------------------------------
-
-/**
- * @brief Kích hoạt nạp tệp local hoặc tải ngầm URL nếu chưa có.
- * @internal Chỉ gọi nội bộ từ GetOrLoad().
- */
-inline void StartDownload(const std::string& url) {
-    // 1. Ưu tiên kiểm tra tệp cục bộ (Local file PNG/JPG) theo map config hoặc đường dẫn trực tiếp
-    std::string localPath = RoleConfig::ResolveLocalPath(url);
-    if (!localPath.empty() && RoleConfig::FileExists(localPath)) {
-        std::lock_guard<std::mutex> lock(g_Mutex);
-        g_Pending[url] = localPath; // Nạp thẳng từ ổ đĩa
+inline void StartLoad(const std::string& key) {
+    std::string localPath = RoleConfig::ResolveLocalPath(key);
+    if (localPath.empty() && RoleConfig::FileExists(key)) {
+        localPath = key;
+    }
+    if (!localPath.empty()) {
+        QueueLocalPath(key, localPath);
         return;
     }
 
-    if (RoleConfig::FileExists(url)) {
-        std::lock_guard<std::mutex> lock(g_Mutex);
-        g_Pending[url] = url;
+    const bool isUrl = key.rfind("http://", 0) == 0 || key.rfind("https://", 0) == 0;
+    if (!isUrl) {
+        std::lock_guard<std::mutex> guard(g_Mutex);
+        g_Loading.erase(key);
         return;
     }
 
-    // 2. Chỉ tiến hành tải ngầm từ mạng nếu chuỗi là URL HTTP/HTTPS
-    if (url.rfind("http://", 0) == 0 || url.rfind("https://", 0) == 0) {
-        {
-            std::lock_guard<std::mutex> lock(g_Mutex);
-            if (g_Downloading.count(url)) return;
-            g_Downloading[url] = true;
+    std::thread worker([key]() {
+        char cachePath[MAX_PATH] = {};
+        const HRESULT result = URLDownloadToCacheFileA(nullptr, key.c_str(), cachePath,
+            static_cast<DWORD>(std::size(cachePath)), 0, nullptr);
+        if (SUCCEEDED(result)) {
+            QueueLocalPath(key, cachePath);
+        } else {
+            std::lock_guard<std::mutex> guard(g_Mutex);
+            g_Loading.erase(key);
         }
+    });
+    std::lock_guard<std::mutex> guard(g_Mutex);
+    g_Workers.emplace_back(std::move(worker));
+}
 
-        std::thread([url]() {
-            char path[MAX_PATH] = {};
-            HRESULT hr = URLDownloadToCacheFileA(
-                NULL, url.c_str(), path, MAX_PATH, 0, NULL);
-            if (SUCCEEDED(hr)) {
-                std::lock_guard<std::mutex> lock(g_Mutex);
-                g_Pending[url] = path;
-            }
-        }).detach();
+inline IDirect3DTexture9* GetOrLoad(IDirect3DDevice9*, const std::string& key) {
+    if (key.empty()) return nullptr;
+
+    {
+        std::lock_guard<std::mutex> guard(g_Mutex);
+        auto cached = g_Cache.find(key);
+        if (cached != g_Cache.end()) return cached->second.Get();
+        if (!g_Loading.insert(key).second) return nullptr;
+    }
+
+    StartLoad(key);
+    return nullptr;
+}
+
+inline void FlushPending(IDirect3DDevice9* device) {
+    if (!device) return;
+
+    std::unordered_map<std::string, std::string> pending;
+    {
+        std::lock_guard<std::mutex> guard(g_Mutex);
+        pending.swap(g_Pending);
+    }
+
+    for (const auto& [key, path] : pending) {
+        ComPtr<IDirect3DTexture9> texture;
+        const HRESULT result = D3DXCreateTextureFromFileExA(device, path.c_str(),
+            D3DX_DEFAULT_NONPOW2, D3DX_DEFAULT_NONPOW2, D3DX_DEFAULT, 0,
+            D3DFMT_UNKNOWN, D3DPOOL_MANAGED, D3DX_DEFAULT, D3DX_DEFAULT,
+            0, nullptr, nullptr, texture.GetAddressOf());
+
+        std::lock_guard<std::mutex> guard(g_Mutex);
+        if (SUCCEEDED(result) && texture) {
+            g_Cache[key] = std::move(texture);
+        }
+        g_Loading.erase(key);
     }
 }
 
-/**
- * @brief Tạo texture từ các path đang chờ. Phải gọi trên render thread mỗi frame.
- * @param dev D3D9 device hiện tại
- */
-inline void FlushPending(IDirect3DDevice9* dev) {
-    std::lock_guard<std::mutex> lock(g_Mutex);
-    for (auto it = g_Pending.begin(); it != g_Pending.end(); ) {
-        LPDIRECT3DTEXTURE9 tex = NULL;
-        const std::string& path = it->second;
-
-        // Nạp tệp ảnh (PNG, JPG, BMP, TGA, DDS) trực tiếp qua D3DX (Hỗ trợ 100% Alpha Channel)
-        D3DXCreateTextureFromFileA(dev, path.c_str(), &tex);
-
-        if (tex) {
-            g_Cache[it->first] = tex;
-        }
-        it = g_Pending.erase(it);
-    }
-}
-
-/**
- * @brief Lấy texture theo URL / Path. Nếu chưa có, kích hoạt nạp ngầm và trả NULL.
- */
-inline LPDIRECT3DTEXTURE9 GetOrLoad(IDirect3DDevice9* dev, const std::string& url) {
-    if (url.empty()) return NULL;
-    auto it = g_Cache.find(url);
-    if (it != g_Cache.end()) return it->second;
-    StartDownload(url);
-    return NULL;
-}
-
-/**
- * @brief Giải phóng tất cả texture. Gọi khi DLL unload.
- */
 inline void ReleaseAll() {
-    for (auto& [url, tex] : g_Cache)
-        if (tex) tex->Release();
+    std::vector<std::thread> workers;
+    {
+        std::lock_guard<std::mutex> guard(g_Mutex);
+        workers.swap(g_Workers);
+    }
+    for (std::thread& worker : workers) {
+        if (worker.joinable()) worker.join();
+    }
+    std::lock_guard<std::mutex> guard(g_Mutex);
     g_Cache.clear();
+    g_Pending.clear();
+    g_Loading.clear();
 }
 
 } // namespace TextureCache

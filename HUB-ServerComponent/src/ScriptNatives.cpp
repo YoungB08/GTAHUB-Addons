@@ -1,22 +1,53 @@
 #include "../include/RoleComponent.hpp"
 #include "../include/amx/amx.h"
 
+#include <cstring>
+#include <climits>
+
 namespace HUBRole {
 
+static cell* amx_GetAddress(AMX* amx, cell paramAddress) {
+    if (!amx || !amx->base || paramAddress < 0 || paramAddress >= amx->stp) return nullptr;
+    const auto* header = reinterpret_cast<const AMX_HEADER*>(amx->base);
+    uint8_t* data = amx->data ? amx->data : amx->base + header->dat;
+    return reinterpret_cast<cell*>(data + paramAddress);
+}
+
 static std::string amx_GetStringParam(AMX* amx, cell paramAddress) {
-    if (!amx) return "";
-    cell* addr = reinterpret_cast<cell*>(amx->base + (amx->data ? (amx->data - amx->base) : 0) + paramAddress);
-    if (!addr) return "";
-    std::string str;
-    while (*addr) {
-        str.push_back(static_cast<char>(*addr & 0xFF));
-        addr++;
+    cell* address = amx_GetAddress(amx, paramAddress);
+    if (!address) return {};
+
+    constexpr size_t maxLength = 255;
+    std::string value;
+    value.reserve(32);
+    if (static_cast<ucell>(*address) > UCHAR_MAX) {
+        for (size_t index = 0; value.size() < maxLength; ++index) {
+            const ucell packed = static_cast<ucell>(address[index]);
+            for (int shift = static_cast<int>(sizeof(cell) * CHAR_BIT - CHAR_BIT); shift >= 0; shift -= CHAR_BIT) {
+                const char character = static_cast<char>((packed >> shift) & UCHAR_MAX);
+                if (character == '\0') return value;
+                value.push_back(character);
+                if (value.size() == maxLength) return value;
+            }
+        }
     }
-    return str;
+    for (size_t index = 0; index < maxLength; ++index) {
+        const char character = static_cast<char>(address[index] & UCHAR_MAX);
+        if (character == '\0') break;
+        value.push_back(character);
+    }
+    return value;
+}
+
+static float amx_GetFloat(cell value) {
+    float result = 0.0f;
+    static_assert(sizeof(result) == sizeof(value));
+    std::memcpy(&result, &value, sizeof(result));
+    return result;
 }
 
 // 1. AddRoleResource(const resourceKey[], const url[])
-static cell AMXAPI n_AddRoleResource(AMX* amx, const cell* params) {
+static cell AMX_NATIVE_CALL n_AddRoleResource(AMX* amx, const cell* params) {
     if (params[0] < 2 * sizeof(cell)) return 0;
     std::string resourceKey = amx_GetStringParam(amx, params[1]);
     std::string url = amx_GetStringParam(amx, params[2]);
@@ -28,14 +59,14 @@ static cell AMXAPI n_AddRoleResource(AMX* amx, const cell* params) {
 }
 
 // SetRoleGlobalConfig(Float:distance, bool:enableLOS, bool:autoHideInVeh, Float:iconWidth, Float:iconHeight)
-static cell AMXAPI n_SetRoleGlobalConfig(AMX* amx, const cell* params) {
+static cell AMX_NATIVE_CALL n_SetRoleGlobalConfig(AMX* amx, const cell* params) {
     (void)amx;
     if (params[0] < 5 * sizeof(cell)) return 0;
-    float distance = *reinterpret_cast<const float*>(&params[1]);
+    float distance = amx_GetFloat(params[1]);
     bool enableLOS = (params[2] != 0);
     bool autoHideInVeh = (params[3] != 0);
-    float iconWidth = *reinterpret_cast<const float*>(&params[4]);
-    float iconHeight = *reinterpret_cast<const float*>(&params[5]);
+    float iconWidth = amx_GetFloat(params[4]);
+    float iconHeight = amx_GetFloat(params[5]);
 
     if (auto comp = GetRoleComponent()) {
         return comp->setRoleGlobalConfig(distance, enableLOS, autoHideInVeh, iconWidth, iconHeight) ? 1 : 0;
@@ -44,7 +75,7 @@ static cell AMXAPI n_SetRoleGlobalConfig(AMX* amx, const cell* params) {
 }
 
 // 2. SetPlayerPresetRole(toPlayerid, targetPlayerid, presetRole, slotID, durationSeconds)
-static cell AMXAPI n_SetPlayerPresetRole(AMX* amx, const cell* params) {
+static cell AMX_NATIVE_CALL n_SetPlayerPresetRole(AMX* amx, const cell* params) {
     (void)amx;
     if (params[0] < 3 * sizeof(cell)) return 0;
     int toPlayer = static_cast<int>(params[1]);
@@ -60,7 +91,7 @@ static cell AMXAPI n_SetPlayerPresetRole(AMX* amx, const cell* params) {
 }
 
 // SetPlayerCustomRole(toPlayerid, targetPlayerid, const tagText[], color, bgColor, bool:stroke, slotID, durationSeconds)
-static cell AMXAPI n_SetPlayerCustomRole(AMX* amx, const cell* params) {
+static cell AMX_NATIVE_CALL n_SetPlayerCustomRole(AMX* amx, const cell* params) {
     if (params[0] < 4 * sizeof(cell)) return 0;
     int toPlayer = static_cast<int>(params[1]);
     int targetPlayer = static_cast<int>(params[2]);
@@ -78,7 +109,7 @@ static cell AMXAPI n_SetPlayerCustomRole(AMX* amx, const cell* params) {
 }
 
 // SetPlayerImageRole(toPlayerid, targetPlayerid, const resourceKey[], const tagText[], color, slotID, durationSeconds)
-static cell AMXAPI n_SetPlayerImageRole(AMX* amx, const cell* params) {
+static cell AMX_NATIVE_CALL n_SetPlayerImageRole(AMX* amx, const cell* params) {
     if (params[0] < 3 * sizeof(cell)) return 0;
     int toPlayer = static_cast<int>(params[1]);
     int targetPlayer = static_cast<int>(params[2]);
@@ -95,7 +126,7 @@ static cell AMXAPI n_SetPlayerImageRole(AMX* amx, const cell* params) {
 }
 
 // 3. SetPlayerRainbowRole(targetPlayerid, bool:toggle, speed_ms, slotID)
-static cell AMXAPI n_SetPlayerRainbowRole(AMX* amx, const cell* params) {
+static cell AMX_NATIVE_CALL n_SetPlayerRainbowRole(AMX* amx, const cell* params) {
     (void)amx;
     if (params[0] < 2 * sizeof(cell)) return 0;
     int targetPlayer = static_cast<int>(params[1]);
@@ -110,7 +141,7 @@ static cell AMXAPI n_SetPlayerRainbowRole(AMX* amx, const cell* params) {
 }
 
 // IsPlayerRainbowActive(playerid, slotID)
-static cell AMXAPI n_IsPlayerRainbowActive(AMX* amx, const cell* params) {
+static cell AMX_NATIVE_CALL n_IsPlayerRainbowActive(AMX* amx, const cell* params) {
     (void)amx;
     if (params[0] < 1 * sizeof(cell)) return 0;
     int playerid = static_cast<int>(params[1]);
@@ -123,7 +154,7 @@ static cell AMXAPI n_IsPlayerRainbowActive(AMX* amx, const cell* params) {
 }
 
 // 4. SetPlayerNametagColor(toPlayerid, targetPlayerid, color)
-static cell AMXAPI n_SetPlayerNametagColor(AMX* amx, const cell* params) {
+static cell AMX_NATIVE_CALL n_SetPlayerNametagColor(AMX* amx, const cell* params) {
     (void)amx;
     if (params[0] < 3 * sizeof(cell)) return 0;
     int toPlayer = static_cast<int>(params[1]);
@@ -137,14 +168,14 @@ static cell AMXAPI n_SetPlayerNametagColor(AMX* amx, const cell* params) {
 }
 
 // GetPlayerNametagColor(targetPlayerid, &color)
-static cell AMXAPI n_GetPlayerNametagColor(AMX* amx, const cell* params) {
+static cell AMX_NATIVE_CALL n_GetPlayerNametagColor(AMX* amx, const cell* params) {
     if (params[0] < 2 * sizeof(cell)) return 0;
     int targetPlayer = static_cast<int>(params[1]);
-    cell* colorPtr = reinterpret_cast<cell*>(amx->base + (amx->data ? (amx->data - amx->base) : 0) + params[2]);
+    RoleComponent* component = GetRoleComponent();
+    cell* colorPtr = amx_GetAddress(amx, params[2]);
+    if (!component || !colorPtr) return 0;
 
-    if (!colorPtr) return 0;
-
-    if (auto comp = GetRoleComponent()) {
+    if (auto comp = component) {
         uint32_t color = 0;
         if (comp->getPlayerNametagColor(targetPlayer, color)) {
             *colorPtr = static_cast<cell>(color);
@@ -155,7 +186,7 @@ static cell AMXAPI n_GetPlayerNametagColor(AMX* amx, const cell* params) {
 }
 
 // ClearPlayerRole(toPlayerid, targetPlayerid, slotID)
-static cell AMXAPI n_ClearPlayerRole(AMX* amx, const cell* params) {
+static cell AMX_NATIVE_CALL n_ClearPlayerRole(AMX* amx, const cell* params) {
     (void)amx;
     if (params[0] < 2 * sizeof(cell)) return 0;
     int toPlayer = static_cast<int>(params[1]);
@@ -169,7 +200,7 @@ static cell AMXAPI n_ClearPlayerRole(AMX* amx, const cell* params) {
 }
 
 // SetPlayerRoleVisible(targetPlayerid, bool:toggle, toPlayerid)
-static cell AMXAPI n_SetPlayerRoleVisible(AMX* amx, const cell* params) {
+static cell AMX_NATIVE_CALL n_SetPlayerRoleVisible(AMX* amx, const cell* params) {
     (void)amx;
     if (params[0] < 2 * sizeof(cell)) return 0;
     int targetPlayer = static_cast<int>(params[1]);
@@ -183,7 +214,7 @@ static cell AMXAPI n_SetPlayerRoleVisible(AMX* amx, const cell* params) {
 }
 
 // 5. HasPlayerRole(playerid, slotID)
-static cell AMXAPI n_HasPlayerRole(AMX* amx, const cell* params) {
+static cell AMX_NATIVE_CALL n_HasPlayerRole(AMX* amx, const cell* params) {
     (void)amx;
     if (params[0] < 1 * sizeof(cell)) return 0;
     int playerid = static_cast<int>(params[1]);
@@ -196,7 +227,7 @@ static cell AMXAPI n_HasPlayerRole(AMX* amx, const cell* params) {
 }
 
 // IsPlayerRoleVisible(playerid)
-static cell AMXAPI n_IsPlayerRoleVisible(AMX* amx, const cell* params) {
+static cell AMX_NATIVE_CALL n_IsPlayerRoleVisible(AMX* amx, const cell* params) {
     (void)amx;
     if (params[0] < 1 * sizeof(cell)) return 0;
     int playerid = static_cast<int>(params[1]);
@@ -208,7 +239,7 @@ static cell AMXAPI n_IsPlayerRoleVisible(AMX* amx, const cell* params) {
 }
 
 // IsRoleResourceLoaded(const resourceKey[])
-static cell AMXAPI n_IsRoleResourceLoaded(AMX* amx, const cell* params) {
+static cell AMX_NATIVE_CALL n_IsRoleResourceLoaded(AMX* amx, const cell* params) {
     if (params[0] < 1 * sizeof(cell)) return 0;
     std::string resourceKey = amx_GetStringParam(amx, params[1]);
 
@@ -232,8 +263,12 @@ const AMX_NATIVE_INFO g_RoleNatives[] = {
     { "SetPlayerRoleVisible",   n_SetPlayerRoleVisible },
     { "HasPlayerRole",         n_HasPlayerRole },
     { "IsPlayerRoleVisible",   n_IsPlayerRoleVisible },
-    { "IsRoleResourceLoaded",   n_IsRoleResourceLoaded },
+    { "IsRoleResourceLoaded",  n_IsRoleResourceLoaded },
     { nullptr,                 nullptr }
 };
+
+void RegisterRoleNatives(IPawnScript& script) {
+    script.Register(g_RoleNatives, -1);
+}
 
 } // namespace HUBRole

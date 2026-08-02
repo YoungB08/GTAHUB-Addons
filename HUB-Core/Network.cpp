@@ -1,348 +1,319 @@
-/**
- * @file Network.cpp
- * @brief Hook RakClientInterface::Receive(), parse packet 220, 222, 223, 224, 225, 226, 227.
- */
 #include "pch.h"
 #include "Network.h"
+
 #include "PlayerData.h"
 #include "RoleConfig.h"
 
 #include <sampapi/0.3.DL-1/CNetGame.h>
-#include <cstring>
-#include <cstdint>
+
 #include <algorithm>
+#include <cstdint>
+#include <cstring>
+#include <string>
 
 using namespace sampapi::v03dl;
 
-// ---------------------------------------------------------------------------
-// Minimal RakNet types (RakNet 2.x embedded trong samp.dll)
-// ---------------------------------------------------------------------------
+namespace {
 
-#pragma pack(push, 1)
+struct RakPlayerId {
+    uint32_t binaryAddress = 0xFFFFFFFF;
+    uint16_t port = 0xFFFF;
+    uint16_t padding = 0;
+};
+
 struct RakPacket {
-    uint16_t systemIndex;
-    char     systemAddress[6]; ///< PlayerID (IP+Port)
+    RakPlayerId playerId;
     uint32_t length;
+    uint32_t bitSize;
     uint8_t* data;
-};
-#pragma pack(pop)
-
-using tReceive = RakPacket*(__thiscall*)(void*);
-using tSendRaw = bool(__thiscall*)(void*, const char*, int, int, int, char, char[6], bool);
-
-constexpr int kVmtReceive          = 5;  ///< Receive()
-constexpr int kVmtDeallocatePacket = 6;  ///< DeallocatePacket(Packet*)
-constexpr int kVmtSendRaw          = 20; ///< Send(char* data, ...)
-
-static tReceive s_OrigReceive = NULL;
-static DWORD*   s_VMT         = NULL;
-static bool     s_Ready       = false;
-
-struct PacketReader {
-    const uint8_t* buf;
-    uint32_t       len;
-    uint32_t       pos = 0;
-
-    bool canRead(uint32_t n) const { return pos + n <= len; }
-
-    template<typename T>
-    bool read(T& out) {
-        if (!canRead(sizeof(T))) return false;
-        memcpy(&out, buf + pos, sizeof(T));
-        pos += sizeof(T);
-        return true;
-    }
-
-    bool readString(std::string& out, uint8_t maxLen = 255) {
-        uint8_t slen = 0;
-        if (!read(slen)) return false;
-        slen = (uint8_t)(std::min)((uint32_t)slen, (uint32_t)maxLen);
-        if (!canRead(slen)) return false;
-        out.assign(reinterpret_cast<const char*>(buf + pos), slen);
-        pos += slen;
-        return true;
-    }
+    bool deleteData;
 };
 
-static void DeallocateRakPacket(void* pRak, RakPacket* pkt) {
-    if (!pRak || !pkt) return;
-    reinterpret_cast<void(__fastcall*)(void*, void*, RakPacket*)>(
-        reinterpret_cast<DWORD*>(*(DWORD*)pRak)[kVmtDeallocatePacket])(pRak, nullptr, pkt);
+using ReceiveFn = RakPacket*(__thiscall*)(void*);
+using DeallocatePacketFn = void(__thiscall*)(void*, RakPacket*);
+using SendRawFn = bool(__thiscall*)(void*, const char*, int, int, int, char);
+
+constexpr size_t kSendRawIndex = 6;
+constexpr size_t kReceiveIndex = 8;
+constexpr size_t kDeallocatePacketIndex = 9;
+
+ReceiveFn g_OriginalReceive = nullptr;
+DeallocatePacketFn g_DeallocatePacket = nullptr;
+SendRawFn g_SendRaw = nullptr;
+DWORD* g_RakVmt = nullptr;
+void* g_RakClient = nullptr;
+bool g_Ready = false;
+
+bool IsReadable(const void* address, size_t size) {
+    if (!address || reinterpret_cast<uintptr_t>(address) < 0x10000 || size == 0) return false;
+
+    MEMORY_BASIC_INFORMATION info{};
+    if (VirtualQuery(address, &info, sizeof(info)) != sizeof(info)) return false;
+    if (info.State != MEM_COMMIT || (info.Protect & (PAGE_GUARD | PAGE_NOACCESS)) != 0) return false;
+
+    const uintptr_t start = reinterpret_cast<uintptr_t>(address);
+    const uintptr_t end = start + size;
+    const uintptr_t regionEnd = reinterpret_cast<uintptr_t>(info.BaseAddress) + info.RegionSize;
+    return end >= start && end <= regionEnd;
 }
 
-// ---------------------------------------------------------------------------
-// Parsers
-// ---------------------------------------------------------------------------
+bool WriteVmtEntry(DWORD* vmt, size_t index, DWORD value) {
+    DWORD oldProtect = 0;
+    if (!VirtualProtect(&vmt[index], sizeof(DWORD), PAGE_EXECUTE_READWRITE, &oldProtect)) return false;
+    vmt[index] = value;
+    FlushInstructionCache(GetCurrentProcess(), &vmt[index], sizeof(DWORD));
+    DWORD unusedProtect = 0;
+    VirtualProtect(&vmt[index], sizeof(DWORD), oldProtect, &unusedProtect);
+    return true;
+}
 
-static void ParseNametagData(const uint8_t* data, uint32_t len) {
-    PacketReader r{ data, len };
+class PacketReader {
+public:
+    PacketReader(const uint8_t* data, size_t length) : data_(data), length_(length) {}
 
-    uint8_t  pktId   = 0; r.read(pktId);
+    template <typename T>
+    bool Read(T& value) {
+        if (!CanRead(sizeof(T))) return false;
+        std::memcpy(&value, data_ + position_, sizeof(T));
+        position_ += sizeof(T);
+        return true;
+    }
+
+    bool ReadString(std::string& value, size_t maximumLength) {
+        uint8_t encodedLength = 0;
+        if (!Read(encodedLength) || encodedLength > maximumLength || !CanRead(encodedLength)) return false;
+        value.assign(reinterpret_cast<const char*>(data_ + position_), encodedLength);
+        position_ += encodedLength;
+        return true;
+    }
+
+private:
+    bool CanRead(size_t count) const {
+        return position_ <= length_ && count <= length_ - position_;
+    }
+
+    const uint8_t* data_ = nullptr;
+    size_t length_ = 0;
+    size_t position_ = 0;
+};
+
+bool ReadHeader(PacketReader& reader, uint8_t expectedPacket, uint16_t& playerId) {
+    uint8_t packetId = 0;
+    return reader.Read(packetId) && packetId == expectedPacket &&
+        reader.Read(playerId) && playerId < kMaxPlayers;
+}
+
+void ParseNametagData(const uint8_t* data, size_t length) {
+    PacketReader reader(data, length);
     uint16_t playerId = 0;
-    if (!r.read(playerId) || playerId >= (uint16_t)kMaxPlayers) return;
-
-    uint8_t slotID = 0;
-    if (!r.read(slotID) || slotID >= kMaxRoleSlots) return;
-
-    PlayerNametag& pn = g_Players[playerId];
-    auto& slot = pn.slots[slotID];
-    slot = RoleSlotClientData{};
-
+    uint8_t slotId = 0;
     uint8_t active = 0;
-    if (!r.read(active)) return;
-    slot.active = (active != 0);
-
-    if (slot.active) {
-        r.readString(slot.text, 63);
-        uint32_t color = 0; r.read(color); slot.color = color;
-        uint32_t bgColor = 0; r.read(bgColor); slot.bgColor = bgColor;
-        uint8_t stroke = 0; r.read(stroke); slot.stroke = (stroke != 0);
-        r.readString(slot.imagePath, 255);
+    if (!ReadHeader(reader, Network::kPktNametagData, playerId) ||
+        !reader.Read(slotId) || slotId >= kMaxRoleSlots || !reader.Read(active)) {
+        return;
     }
 
-    pn.hasData = true;
+    RoleSlotClientData slot{};
+    slot.active = active != 0;
+    if (slot.active) {
+        uint8_t stroke = 0;
+        if (!reader.Read(slot.color) || !reader.Read(slot.bgColor) || !reader.Read(stroke) ||
+            !reader.ReadString(slot.text, 63) || !reader.ReadString(slot.imagePath, 255)) {
+            return;
+        }
+        slot.stroke = stroke != 0;
+    }
+
+    std::lock_guard<std::mutex> guard(g_PlayerDataMutex);
+    g_Players[playerId].slots[slotId] = std::move(slot);
+    g_Players[playerId].hasData = true;
+    Log("Role packet 220 received: player=%u slot=%u active=%u bytes=%u",
+        playerId, slotId, active, static_cast<unsigned>(length));
 }
 
-static void ParsePresetRole(const uint8_t* data, uint32_t len) {
-    PacketReader r{ data, len };
-
-    uint8_t  pktId   = 0; r.read(pktId);
+void ParsePresetRole(const uint8_t* data, size_t length) {
+    PacketReader reader(data, length);
     uint16_t playerId = 0;
-    if (!r.read(playerId) || playerId >= (uint16_t)kMaxPlayers) return;
+    uint8_t slotId = 0;
+    uint8_t roleType = 0;
+    if (!ReadHeader(reader, Network::kPktPresetRole, playerId) ||
+        !reader.Read(slotId) || slotId >= kMaxRoleSlots || !reader.Read(roleType)) {
+        return;
+    }
 
-    uint8_t roleType = 0; r.read(roleType);
-    uint8_t slotID = 0; r.read(slotID);
-    if (slotID >= kMaxRoleSlots) slotID = 0;
-
-    std::string roleName;
+    const char* roleName = nullptr;
     switch (roleType) {
-        case Network::ROLE_ADMIN:     roleName = "ADMIN"; break;
-        case Network::ROLE_VIP:       roleName = "VIP"; break;
+        case Network::ROLE_ADMIN: roleName = "ADMIN"; break;
+        case Network::ROLE_VIP: roleName = "VIP"; break;
         case Network::ROLE_MODERATOR: roleName = "MOD"; break;
-        case Network::ROLE_HELPER:    roleName = "HELPER"; break;
+        case Network::ROLE_HELPER: roleName = "HELPER"; break;
         case Network::ROLE_DEVELOPER: roleName = "DEV"; break;
         default: break;
     }
 
-    PlayerNametag& pn = g_Players[playerId];
-    auto& slot = pn.slots[slotID];
-    slot = RoleSlotClientData{};
-
-    if (!roleName.empty()) {
+    RoleSlotClientData slot{};
+    if (roleName) {
+        const RoleConfig::RolePresetConfig config = RoleConfig::GetPresetRoleConfig(roleName);
         slot.active = true;
-        slot.text = roleName;
-        slot.imagePath = "HUB-Core/icons/" + roleName + ".png";
-        
-        RoleConfig::RolePresetConfig cfg = RoleConfig::GetPresetRoleConfig(roleName);
-        if (cfg.hasConfig) {
-            slot.color = cfg.color;
-            slot.stroke = cfg.stroke;
-        } else {
-            slot.color = D3DCOLOR_ARGB(255, 200, 200, 200);
-            slot.stroke = true;
-        }
+        slot.text = config.hasConfig ? config.text : roleName;
+        slot.color = config.hasConfig ? config.color : D3DCOLOR_ARGB(255, 200, 200, 200);
+        slot.stroke = config.hasConfig ? config.stroke : true;
+        slot.imagePath = config.hasConfig ? config.imagePath : "HUB-Core/icons/" + std::string(roleName) + ".png";
     }
 
-    pn.hasData = true;
+    std::lock_guard<std::mutex> guard(g_PlayerDataMutex);
+    g_Players[playerId].slots[slotId] = std::move(slot);
+    g_Players[playerId].hasData = true;
 }
 
-static void ParseRoleByName(const uint8_t* data, uint32_t len) {
-    PacketReader r{ data, len };
-
-    uint8_t  pktId   = 0; r.read(pktId);
+void ParseClearRole(const uint8_t* data, size_t length) {
+    PacketReader reader(data, length);
     uint16_t playerId = 0;
-    if (!r.read(playerId) || playerId >= (uint16_t)kMaxPlayers) return;
+    int8_t slotId = -1;
+    if (!ReadHeader(reader, Network::kPktClearRole, playerId) || !reader.Read(slotId)) return;
 
-    uint8_t slotID = 0; r.read(slotID);
-    if (slotID >= kMaxRoleSlots) slotID = 0;
-
-    std::string roleName;
-    if (!r.readString(roleName, 63)) return;
-
-    PlayerNametag& pn = g_Players[playerId];
-    auto& slot = pn.slots[slotID];
-    slot = RoleSlotClientData{};
-
-    if (!roleName.empty()) {
-        slot.active = true;
-        slot.text = roleName;
-        slot.imagePath = "HUB-Core/icons/" + roleName + ".png";
-        slot.color = D3DCOLOR_ARGB(255, 200, 200, 200);
-        slot.stroke = true;
-    }
-
-    pn.hasData = true;
-}
-
-static void ParseClearRole(const uint8_t* data, uint32_t len) {
-    PacketReader r{ data, len };
-    uint8_t  pktId   = 0; r.read(pktId);
-    uint16_t playerId = 0;
-    if (!r.read(playerId) || playerId >= (uint16_t)kMaxPlayers) return;
-
-    int8_t slotID = -1;
-    r.read(slotID);
-
-    PlayerNametag& pn = g_Players[playerId];
-    if (slotID == -1) {
-        ResetPlayerData(playerId);
-    } else if (slotID >= 0 && slotID < kMaxRoleSlots) {
-        pn.slots[slotID] = RoleSlotClientData{};
+    std::lock_guard<std::mutex> guard(g_PlayerDataMutex);
+    if (slotId == -1) {
+        for (RoleSlotClientData& slot : g_Players[playerId].slots) slot = RoleSlotClientData{};
+    } else if (slotId >= 0 && slotId < kMaxRoleSlots) {
+        g_Players[playerId].slots[slotId] = RoleSlotClientData{};
     }
 }
 
-static void ParseSetRainbow(const uint8_t* data, uint32_t len) {
-    PacketReader r{ data, len };
-    uint8_t  pktId   = 0; r.read(pktId);
+void ParseRainbow(const uint8_t* data, size_t length) {
+    PacketReader reader(data, length);
     uint16_t playerId = 0;
-    if (!r.read(playerId) || playerId >= (uint16_t)kMaxPlayers) return;
+    int8_t slotId = -1;
+    uint8_t enabled = 0;
+    uint32_t speedMs = 500;
+    if (!ReadHeader(reader, Network::kPktSetRainbow, playerId) || !reader.Read(slotId) ||
+        !reader.Read(enabled) || !reader.Read(speedMs)) {
+        return;
+    }
+    speedMs = (std::max)(speedMs, 50u);
 
-    int8_t slotID = -1; r.read(slotID);
-    uint8_t toggle = 0; r.read(toggle);
-    uint16_t speed = 500; r.read(speed);
-
-    PlayerNametag& pn = g_Players[playerId];
-    if (slotID == -1) {
-        pn.isNametagRainbow = (toggle != 0);
-        pn.nametagRainbowSpeedMs = speed;
-    } else if (slotID >= 0 && slotID < kMaxRoleSlots) {
-        pn.slots[slotID].isRainbow = (toggle != 0);
-        pn.slots[slotID].rainbowSpeedMs = speed;
+    std::lock_guard<std::mutex> guard(g_PlayerDataMutex);
+    PlayerNametag& nametag = g_Players[playerId];
+    if (slotId == -1) {
+        nametag.isNametagRainbow = enabled != 0;
+        nametag.nametagRainbowSpeedMs = speedMs;
+    } else if (slotId >= 0 && slotId < kMaxRoleSlots) {
+        nametag.slots[slotId].isRainbow = enabled != 0;
+        nametag.slots[slotId].rainbowSpeedMs = speedMs;
     }
 }
 
-static void ParseNametagColor(const uint8_t* data, uint32_t len) {
-    PacketReader r{ data, len };
-    uint8_t  pktId   = 0; r.read(pktId);
+void ParseNametagColor(const uint8_t* data, size_t length) {
+    PacketReader reader(data, length);
     uint16_t playerId = 0;
-    if (!r.read(playerId) || playerId >= (uint16_t)kMaxPlayers) return;
-
     uint32_t color = 0;
-    if (!r.read(color)) return;
+    if (!ReadHeader(reader, Network::kPktNametagColor, playerId) || !reader.Read(color)) return;
 
-    PlayerNametag& pn = g_Players[playerId];
-    pn.nametagColor = color;
-    pn.hasCustomNametagColor = true;
+    std::lock_guard<std::mutex> guard(g_PlayerDataMutex);
+    g_Players[playerId].nametagColor = color;
+    g_Players[playerId].hasCustomNametagColor = true;
 }
 
-static void ParseSetVisibility(const uint8_t* data, uint32_t len) {
-    PacketReader r{ data, len };
-    uint8_t  pktId   = 0; r.read(pktId);
+void ParseVisibility(const uint8_t* data, size_t length) {
+    PacketReader reader(data, length);
     uint16_t playerId = 0;
-    if (!r.read(playerId) || playerId >= (uint16_t)kMaxPlayers) return;
-
     uint8_t visible = 1;
-    if (!r.read(visible)) return;
+    if (!ReadHeader(reader, Network::kPktSetVisibility, playerId) || !reader.Read(visible)) return;
 
-    PlayerNametag& pn = g_Players[playerId];
-    pn.visible = (visible != 0);
+    std::lock_guard<std::mutex> guard(g_PlayerDataMutex);
+    g_Players[playerId].visible = visible != 0;
 }
 
-// ---------------------------------------------------------------------------
-// Hook
-// ---------------------------------------------------------------------------
+bool HandlePacket(const RakPacket* packet) {
+    if (!packet || !IsReadable(packet, sizeof(RakPacket)) || packet->length == 0 ||
+        packet->length > 4096 || !IsReadable(packet->data, packet->length)) {
+        return false;
+    }
 
-static RakPacket* __fastcall hkReceive(void* pRak, void* edx) {
-    RakPacket* pkt = s_OrigReceive(pRak);
-    if (!pkt || !pkt->data || pkt->length == 0) return pkt;
-
-    switch (pkt->data[0]) {
-        case Network::kPktNametagData:
-            ParseNametagData(pkt->data, pkt->length);
-            DeallocateRakPacket(pRak, pkt);
-            return NULL;
-
-        case Network::kPktPresetRole:
-            ParsePresetRole(pkt->data, pkt->length);
-            DeallocateRakPacket(pRak, pkt);
-            return NULL;
-
-        case Network::kPktClearRole:
-            ParseClearRole(pkt->data, pkt->length);
-            DeallocateRakPacket(pRak, pkt);
-            return NULL;
-
-        case Network::kPktSetRoleByName:
-            ParseRoleByName(pkt->data, pkt->length);
-            DeallocateRakPacket(pRak, pkt);
-            return NULL;
-
-        case Network::kPktSetRainbow:
-            ParseSetRainbow(pkt->data, pkt->length);
-            DeallocateRakPacket(pRak, pkt);
-            return NULL;
-
-        case Network::kPktNametagColor:
-            ParseNametagColor(pkt->data, pkt->length);
-            DeallocateRakPacket(pRak, pkt);
-            return NULL;
-
-        case Network::kPktSetVisibility:
-            ParseSetVisibility(pkt->data, pkt->length);
-            DeallocateRakPacket(pRak, pkt);
-            return NULL;
-
-        default:
-            return pkt;
+    switch (packet->data[0]) {
+        case Network::kPktNametagData: ParseNametagData(packet->data, packet->length); return true;
+        case Network::kPktPresetRole: ParsePresetRole(packet->data, packet->length); return true;
+        case Network::kPktClearRole: ParseClearRole(packet->data, packet->length); return true;
+        case Network::kPktSetRainbow: ParseRainbow(packet->data, packet->length); return true;
+        case Network::kPktNametagColor: ParseNametagColor(packet->data, packet->length); return true;
+        case Network::kPktSetVisibility: ParseVisibility(packet->data, packet->length); return true;
+        default: return false;
     }
 }
 
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
+RakPacket* __fastcall HookedReceive(void* rakClient, void*) {
+    if (!g_OriginalReceive) return nullptr;
+
+    RakPacket* packet = g_OriginalReceive(rakClient);
+    if (!packet || !HandlePacket(packet)) return packet;
+
+    if (g_DeallocatePacket) g_DeallocatePacket(rakClient, packet);
+    return nullptr;
+}
+
+} // namespace
 
 void Network::Init() {
-    if (s_Ready) return;
+    if (g_Ready) return;
 
-    CNetGame* pNet = GetRefNetGame();
-    if (!pNet) return;
+    CNetGame* netGame = GetRefNetGame();
+    const SAMPVersionInfo version = SAMPVersionInfo::Get();
+    if (!netGame || !version.fnGetRakClient) return;
 
-    SAMPVersionInfo vInfo = SAMPVersionInfo::Get();
-    if (!vInfo.fnGetRakClient) return;
+    void* rakClient = reinterpret_cast<void*(__thiscall*)(void*)>(version.fnGetRakClient)(netGame);
+    if (!IsReadable(rakClient, sizeof(void*))) return;
 
-    void* pRak = reinterpret_cast<void*(__thiscall*)(void*)>(vInfo.fnGetRakClient)(pNet);
-    if (!pRak || IsBadReadPtr(pRak, sizeof(void*))) return;
+    DWORD** vmtPointer = reinterpret_cast<DWORD**>(rakClient);
+    if (!IsReadable(vmtPointer, sizeof(*vmtPointer)) ||
+        !IsReadable(*vmtPointer, sizeof(DWORD) * (kSendRawIndex + 1))) {
+        return;
+    }
 
-    s_VMT = *reinterpret_cast<DWORD**>(pRak);
-    if (!s_VMT || IsBadReadPtr(s_VMT, sizeof(void*) * 10)) return;
+    DWORD* vmt = *vmtPointer;
+    ReceiveFn originalReceive = reinterpret_cast<ReceiveFn>(vmt[kReceiveIndex]);
+    if (!originalReceive) return;
 
-    s_OrigReceive = reinterpret_cast<tReceive>(s_VMT[kVmtReceive]);
+    g_RakClient = rakClient;
+    g_RakVmt = vmt;
+    g_OriginalReceive = originalReceive;
+    g_DeallocatePacket = reinterpret_cast<DeallocatePacketFn>(vmt[kDeallocatePacketIndex]);
+    g_SendRaw = reinterpret_cast<SendRawFn>(vmt[kSendRawIndex]);
 
-    DWORD old;
-    VirtualProtect(&s_VMT[kVmtReceive], sizeof(DWORD), PAGE_EXECUTE_READWRITE, &old);
-    s_VMT[kVmtReceive] = reinterpret_cast<DWORD>(hkReceive);
-    VirtualProtect(&s_VMT[kVmtReceive], sizeof(DWORD), old, &old);
+    if (!WriteVmtEntry(vmt, kReceiveIndex, reinterpret_cast<DWORD>(&HookedReceive))) {
+        g_RakClient = nullptr;
+        g_RakVmt = nullptr;
+        g_OriginalReceive = nullptr;
+        g_DeallocatePacket = nullptr;
+        g_SendRaw = nullptr;
+        return;
+    }
 
-    s_Ready = true;
-    Log("Network::Init succeeded! pRak=%p", pRak);
+    g_Ready = true;
+    Log("RakNet Receive hook installed: client=%p", rakClient);
 }
 
 void Network::RequestData() {
-    if (!s_Ready) return;
+    if (!g_Ready || !g_RakClient || !g_SendRaw) return;
 
-    CNetGame* pNet = GetRefNetGame();
-    if (!pNet) return;
-
-    SAMPVersionInfo vInfo = SAMPVersionInfo::Get();
-    if (!vInfo.fnGetRakClient) return;
-
-    void* pRak = reinterpret_cast<void*(__thiscall*)(void*)>(vInfo.fnGetRakClient)(pNet);
-    if (!pRak) return;
-
-    uint8_t buf[1] = { kPktRequestData };
-    char serverAddr[6] = {};
-    auto fnSend = reinterpret_cast<tSendRaw>(s_VMT[kVmtSendRaw]);
-    fnSend(pRak, reinterpret_cast<const char*>(buf), 1,
-        2 /*HIGH_PRIORITY*/, 3 /*RELIABLE_ORDERED*/, 0, serverAddr, false);
+    const char packet[] = {static_cast<char>(kPktRequestData)};
+    g_SendRaw(g_RakClient, packet, static_cast<int>(sizeof(packet)),
+        2, 3, 0);
 }
 
 void Network::Shutdown() {
-    if (!s_Ready || !s_VMT) return;
-    DWORD old;
-    VirtualProtect(&s_VMT[kVmtReceive], sizeof(DWORD), PAGE_EXECUTE_READWRITE, &old);
-    s_VMT[kVmtReceive] = reinterpret_cast<DWORD>(s_OrigReceive);
-    VirtualProtect(&s_VMT[kVmtReceive], sizeof(DWORD), old, &old);
-    s_Ready = false; s_OrigReceive = NULL; s_VMT = NULL;
+    if (g_Ready && g_RakVmt &&
+        g_RakVmt[kReceiveIndex] == reinterpret_cast<DWORD>(&HookedReceive) && g_OriginalReceive) {
+        WriteVmtEntry(g_RakVmt, kReceiveIndex, reinterpret_cast<DWORD>(g_OriginalReceive));
+    }
+
+    g_Ready = false;
+    g_RakClient = nullptr;
+    g_RakVmt = nullptr;
+    g_OriginalReceive = nullptr;
+    g_DeallocatePacket = nullptr;
+    g_SendRaw = nullptr;
 }
 
-bool Network::IsReady() { return s_Ready; }
+bool Network::IsReady() {
+    return g_Ready;
+}

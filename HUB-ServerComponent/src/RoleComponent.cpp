@@ -2,6 +2,7 @@
 #include <fstream>
 #include <filesystem>
 #include <cmath>
+#include <algorithm>
 
 #if defined(_WIN32) || defined(_WIN64)
 #include <windows.h>
@@ -12,6 +13,25 @@
 namespace HUBRole {
 
 static RoleComponent* s_RoleComponentInstance = nullptr;
+
+class RolePawnEventHandler final : public PawnEventHandler {
+public:
+    explicit RolePawnEventHandler(RoleComponent& component) : component_(component) {}
+
+    void onAmxLoad(IPawnScript& script) override { component_.onAmxLoad(script); }
+    void onAmxUnload(IPawnScript& script) override { component_.onAmxUnload(script); }
+
+private:
+    RoleComponent& component_;
+};
+
+static bool IsValidPlayerId(int playerId) {
+    return playerId >= 0 && playerId < 1004;
+}
+
+static bool IsValidRecipientId(int playerId) {
+    return playerId == -1 || IsValidPlayerId(playerId);
+}
 
 RoleComponent* GetRoleComponent() {
     return s_RoleComponentInstance;
@@ -36,12 +56,16 @@ void RoleComponent::onInit(IComponentList* components) {
 
     if (core_) {
         core_->getPlayers().getPlayerConnectDispatcher().addEventHandler(this);
+        core_->getEventDispatcher().addEventHandler(this);
+        core_->addPerPacketInEventHandler<221>(this);
         Logger::Info("[LIFECYCLE] Event handler registered with core IPlayerPool.");
     }
 
-    running_ = true;
-    workerThread_ = std::thread(&RoleComponent::workerLoop, this);
-    Logger::Info("[WORKER] Background worker thread started for Timed Roles & Rainbow Ticks.");
+    if (pawn_) {
+        pawnEventHandler_ = new RolePawnEventHandler(*this);
+        pawn_->getEventDispatcher().addEventHandler(pawnEventHandler_);
+    }
+    lastExpiryCheck_ = std::chrono::steady_clock::now();
 }
 
 void RoleComponent::onReady() {
@@ -53,19 +77,24 @@ void RoleComponent::onReady() {
 
 void RoleComponent::free() {
     Logger::Info("[LIFECYCLE] RoleComponent component unloading...");
-    running_ = false;
-    if (workerThread_.joinable()) {
-        workerThread_.join();
-        Logger::Info("[WORKER] Worker thread joined and stopped successfully.");
+    for (std::thread& thread : downloadThreads_) {
+        if (thread.joinable()) thread.join();
     }
+    downloadThreads_.clear();
 
     if (core_) {
         core_->getPlayers().getPlayerConnectDispatcher().removeEventHandler(this);
+        core_->getEventDispatcher().removeEventHandler(this);
+        core_->removePerPacketInEventHandler<221>(this);
     }
+    if (pawn_ && pawnEventHandler_) pawn_->getEventDispatcher().removeEventHandler(pawnEventHandler_);
+    delete static_cast<RolePawnEventHandler*>(pawnEventHandler_);
+    pawnEventHandler_ = nullptr;
     s_RoleComponentInstance = nullptr;
     playerRoles_.clear();
     registeredResources_.clear();
     Logger::Info("[LIFECYCLE] RoleComponent fully unloaded.");
+    delete this;
 }
 
 void RoleComponent::reset() {
@@ -77,9 +106,15 @@ void RoleComponent::reset() {
 }
 
 void RoleComponent::onPlayerConnect(IPlayer& player) {
-    std::lock_guard<std::mutex> lock(lock_);
-    int id = player.getID();
-    playerRoles_[id].reset();
+    const int id = player.getID();
+    std::vector<std::pair<int, PlayerRoleState>> states;
+    {
+        std::lock_guard<std::mutex> lock(lock_);
+        playerRoles_[id].reset();
+        states.reserve(playerRoles_.size());
+        for (const auto& [targetId, state] : playerRoles_) states.emplace_back(targetId, state);
+    }
+    for (const auto& [targetId, state] : states) broadcastRoleUpdate(id, targetId, state);
     Logger::Info("[PLAYER CONNECT] Player ID %d connected. Role state initialized.", id);
 }
 
@@ -91,11 +126,39 @@ void RoleComponent::onPlayerDisconnect(IPlayer& player, PeerDisconnectReason rea
     Logger::Info("[PLAYER DISCONNECT] Player ID %d disconnected. Role state cleared.", id);
 }
 
+void RoleComponent::onAmxLoad(IPawnScript& script) {
+    {
+        std::lock_guard<std::mutex> lock(lock_);
+        pawnScripts_[script.GetAMX()] = &script;
+    }
+    RegisterRoleNatives(script);
+}
+
+void RoleComponent::onAmxUnload(IPawnScript& script) {
+    std::lock_guard<std::mutex> lock(lock_);
+    pawnScripts_.erase(script.GetAMX());
+}
+
+bool RoleComponent::onReceive(IPlayer& peer, NetworkBitStream& bs) {
+    (void)bs;
+    std::vector<std::pair<int, PlayerRoleState>> states;
+    {
+        std::lock_guard<std::mutex> lock(lock_);
+        states.reserve(playerRoles_.size());
+        for (const auto& [targetId, state] : playerRoles_) states.emplace_back(targetId, state);
+    }
+    for (const auto& [targetId, state] : states) broadcastRoleUpdate(peer.getID(), targetId, state);
+    return false;
+}
+
 // -----------------------------------------------------------------------------
 // 1. GLOBAL CONFIG & ASYNC RESOURCE
 // -----------------------------------------------------------------------------
 
 bool RoleComponent::setRoleGlobalConfig(float distance, bool enableLOS, bool autoHideInVeh, float iconWidth, float iconHeight) {
+    if (!std::isfinite(distance) || !std::isfinite(iconWidth) || !std::isfinite(iconHeight) ||
+        distance < 1.0f || distance > 300.0f || iconWidth < 1.0f || iconWidth > 256.0f ||
+        iconHeight < 1.0f || iconHeight > 256.0f) return false;
     std::lock_guard<std::mutex> lock(lock_);
     config_.drawDistance = distance;
     config_.enableLOS = enableLOS;
@@ -118,7 +181,8 @@ bool RoleComponent::addRoleResource(std::string_view resourceKey, std::string_vi
     std::string key(resourceKey);
     std::string sUrl(url);
 
-    if (key.empty()) {
+    if (key.empty() || key.size() > 128 || sUrl.size() > 2048 ||
+        key.find("..") != std::string::npos || key.find('/') != std::string::npos || key.find('\\') != std::string::npos) {
         Logger::Warn("[RESOURCE] AddRoleResource failed: empty resourceKey.");
         return false;
     }
@@ -137,8 +201,7 @@ bool RoleComponent::addRoleResource(std::string_view resourceKey, std::string_vi
                  key.c_str(), sUrl.c_str(), localPath.c_str(), res.isLoaded ? 1 : 0);
 
     if (!res.isLoaded && !sUrl.empty()) {
-        std::thread downloadThread(&RoleComponent::downloadResourceAsync, this, key, sUrl, localPath);
-        downloadThread.detach();
+        downloadThreads_.emplace_back(&RoleComponent::downloadResourceAsync, this, key, sUrl, localPath);
     }
 
     return true;
@@ -187,7 +250,10 @@ void RoleComponent::downloadResourceAsync(std::string key, std::string url, std:
         Logger::Warn("[ASYNC DOWNLOAD] Failed downloading resource '%s' from '%s'.", key.c_str(), url.c_str());
     }
 
-    triggerOnRoleResourceLoaded(-1, key, success);
+    {
+        std::lock_guard<std::mutex> lock(lock_);
+        pendingResourceCallbacks_.emplace_back(-1, key, success);
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -195,12 +261,14 @@ void RoleComponent::downloadResourceAsync(std::string key, std::string url, std:
 // -----------------------------------------------------------------------------
 
 bool RoleComponent::setPlayerPresetRole(int toPlayer, int targetPlayer, uint8_t presetRole, int slotID, int durationSeconds) {
-    if (slotID < 0 || slotID >= MAX_ROLE_SLOTS) {
+    if (!IsValidRecipientId(toPlayer) || !IsValidPlayerId(targetPlayer) ||
+        presetRole < ROLE_ADMIN || presetRole > ROLE_DEVELOPER ||
+        slotID < 0 || slotID >= MAX_ROLE_SLOTS || durationSeconds < 0) {
         Logger::Warn("[SET ROLE] Invalid slotID %d for targetPlayer %d.", slotID, targetPlayer);
         return false;
     }
 
-    std::lock_guard<std::mutex> lock(lock_);
+    std::unique_lock<std::mutex> lock(lock_);
     auto& state = playerRoles_[targetPlayer];
     auto& slot = state.slots[slotID];
     slot = RoleSlotData{};
@@ -256,14 +324,17 @@ bool RoleComponent::setPlayerPresetRole(int toPlayer, int targetPlayer, uint8_t 
     Logger::Info("[SET PRESET] targetPlayer=%d, preset=%d ('%s'), slotID=%d, duration=%ds, toPlayer=%d",
                  targetPlayer, presetRole, slot.text.c_str(), slotID, durationSeconds, toPlayer);
 
-    broadcastRoleUpdate(toPlayer, targetPlayer, state);
+    const PlayerRoleState snapshot = state;
+    lock.unlock();
+    broadcastRoleUpdate(toPlayer, targetPlayer, snapshot);
     return true;
 }
 
 bool RoleComponent::setPlayerCustomRole(int toPlayer, int targetPlayer, std::string_view tagText, uint32_t color, uint32_t bgColor, bool stroke, int slotID, int durationSeconds) {
-    if (slotID < 0 || slotID >= MAX_ROLE_SLOTS) return false;
+    if (!IsValidRecipientId(toPlayer) || !IsValidPlayerId(targetPlayer) || tagText.empty() ||
+        tagText.size() > 63 || slotID < 0 || slotID >= MAX_ROLE_SLOTS || durationSeconds < 0) return false;
 
-    std::lock_guard<std::mutex> lock(lock_);
+    std::unique_lock<std::mutex> lock(lock_);
     auto& state = playerRoles_[targetPlayer];
     auto& slot = state.slots[slotID];
     slot = RoleSlotData{};
@@ -281,14 +352,18 @@ bool RoleComponent::setPlayerCustomRole(int toPlayer, int targetPlayer, std::str
     Logger::Info("[SET CUSTOM] targetPlayer=%d, text='%s', color=0x%08X, bgColor=0x%08X, stroke=%d, slotID=%d, duration=%ds, toPlayer=%d",
                  targetPlayer, slot.text.c_str(), color, bgColor, stroke ? 1 : 0, slotID, durationSeconds, toPlayer);
 
-    broadcastRoleUpdate(toPlayer, targetPlayer, state);
+    const PlayerRoleState snapshot = state;
+    lock.unlock();
+    broadcastRoleUpdate(toPlayer, targetPlayer, snapshot);
     return true;
 }
 
 bool RoleComponent::setPlayerImageRole(int toPlayer, int targetPlayer, std::string_view resourceKey, std::string_view tagText, uint32_t color, int slotID, int durationSeconds) {
-    if (slotID < 0 || slotID >= MAX_ROLE_SLOTS) return false;
+    if (!IsValidRecipientId(toPlayer) || !IsValidPlayerId(targetPlayer) || resourceKey.empty() ||
+        resourceKey.size() > 255 || tagText.size() > 63 || slotID < 0 ||
+        slotID >= MAX_ROLE_SLOTS || durationSeconds < 0) return false;
 
-    std::lock_guard<std::mutex> lock(lock_);
+    std::unique_lock<std::mutex> lock(lock_);
     auto& state = playerRoles_[targetPlayer];
     auto& slot = state.slots[slotID];
     slot = RoleSlotData{};
@@ -296,7 +371,10 @@ bool RoleComponent::setPlayerImageRole(int toPlayer, int targetPlayer, std::stri
     slot.text = std::string(tagText);
     slot.color = color;
     slot.resourceKey = std::string(resourceKey);
-    slot.imagePath = "HUB-Core/icons/" + slot.resourceKey;
+    auto resource = registeredResources_.find(slot.resourceKey);
+    slot.imagePath = resource != registeredResources_.end() && !resource->second.url.empty()
+        ? resource->second.url
+        : "HUB-Core/icons/" + slot.resourceKey;
 
     if (durationSeconds > 0) {
         slot.isTimed = true;
@@ -306,7 +384,9 @@ bool RoleComponent::setPlayerImageRole(int toPlayer, int targetPlayer, std::stri
     Logger::Info("[SET IMAGE] targetPlayer=%d, resourceKey='%s', imagePath='%s', text='%s', slotID=%d, duration=%ds, toPlayer=%d",
                  targetPlayer, slot.resourceKey.c_str(), slot.imagePath.c_str(), slot.text.c_str(), slotID, durationSeconds, toPlayer);
 
-    broadcastRoleUpdate(toPlayer, targetPlayer, state);
+    const PlayerRoleState snapshot = state;
+    lock.unlock();
+    broadcastRoleUpdate(toPlayer, targetPlayer, snapshot);
     return true;
 }
 
@@ -315,7 +395,8 @@ bool RoleComponent::setPlayerImageRole(int toPlayer, int targetPlayer, std::stri
 // -----------------------------------------------------------------------------
 
 bool RoleComponent::setPlayerRainbowRole(int targetPlayer, bool toggle, int speed_ms, int slotID) {
-    std::lock_guard<std::mutex> lock(lock_);
+    if (!IsValidPlayerId(targetPlayer) || speed_ms < 0) return false;
+    std::unique_lock<std::mutex> lock(lock_);
     auto& state = playerRoles_[targetPlayer];
 
     if (slotID == -1) {
@@ -333,11 +414,14 @@ bool RoleComponent::setPlayerRainbowRole(int targetPlayer, bool toggle, int spee
         return false;
     }
 
-    broadcastRoleUpdate(-1, targetPlayer, state);
+    const PlayerRoleState snapshot = state;
+    lock.unlock();
+    broadcastRoleUpdate(-1, targetPlayer, snapshot);
     return true;
 }
 
 bool RoleComponent::isPlayerRainbowActive(int playerid, int slotID) const {
+    if (!IsValidPlayerId(playerid)) return false;
     std::lock_guard<std::mutex> lock(lock_);
     auto it = playerRoles_.find(playerid);
     if (it != playerRoles_.end()) {
@@ -352,7 +436,8 @@ bool RoleComponent::isPlayerRainbowActive(int playerid, int slotID) const {
 // -----------------------------------------------------------------------------
 
 bool RoleComponent::setPlayerNametagColor(int toPlayer, int targetPlayer, uint32_t color) {
-    std::lock_guard<std::mutex> lock(lock_);
+    if (!IsValidRecipientId(toPlayer) || !IsValidPlayerId(targetPlayer)) return false;
+    std::unique_lock<std::mutex> lock(lock_);
     auto& state = playerRoles_[targetPlayer];
     state.nametagColor = color;
     state.hasCustomNametagColor = true;
@@ -360,11 +445,14 @@ bool RoleComponent::setPlayerNametagColor(int toPlayer, int targetPlayer, uint32
     Logger::Info("[NAMETAG COLOR] SetPlayerNametagColor: targetPlayer=%d, color=0x%08X, toPlayer=%d",
                  targetPlayer, color, toPlayer);
 
-    broadcastRoleUpdate(toPlayer, targetPlayer, state);
+    const PlayerRoleState snapshot = state;
+    lock.unlock();
+    broadcastRoleUpdate(toPlayer, targetPlayer, snapshot);
     return true;
 }
 
 bool RoleComponent::getPlayerNametagColor(int targetPlayer, uint32_t& color) const {
+    if (!IsValidPlayerId(targetPlayer)) return false;
     std::lock_guard<std::mutex> lock(lock_);
     auto it = playerRoles_.find(targetPlayer);
     if (it != playerRoles_.end() && it->second.hasCustomNametagColor) {
@@ -375,11 +463,12 @@ bool RoleComponent::getPlayerNametagColor(int targetPlayer, uint32_t& color) con
 }
 
 bool RoleComponent::clearPlayerRole(int toPlayer, int targetPlayer, int slotID) {
-    std::lock_guard<std::mutex> lock(lock_);
+    if (!IsValidRecipientId(toPlayer) || !IsValidPlayerId(targetPlayer)) return false;
+    std::unique_lock<std::mutex> lock(lock_);
     auto& state = playerRoles_[targetPlayer];
 
     if (slotID == -1) {
-        state.reset();
+        for (auto& slot : state.slots) slot = RoleSlotData{};
         Logger::Info("[CLEAR ROLE] ClearPlayerRole: ALL slots cleared for targetPlayer=%d, toPlayer=%d", targetPlayer, toPlayer);
     } else if (slotID >= 0 && slotID < MAX_ROLE_SLOTS) {
         state.slots[slotID] = RoleSlotData{};
@@ -388,19 +477,24 @@ bool RoleComponent::clearPlayerRole(int toPlayer, int targetPlayer, int slotID) 
         return false;
     }
 
-    broadcastRoleUpdate(toPlayer, targetPlayer, state);
+    const PlayerRoleState snapshot = state;
+    lock.unlock();
+    broadcastRoleUpdate(toPlayer, targetPlayer, snapshot);
     return true;
 }
 
 bool RoleComponent::setPlayerRoleVisible(int targetPlayer, bool toggle, int toPlayer) {
-    std::lock_guard<std::mutex> lock(lock_);
+    if (!IsValidRecipientId(toPlayer) || !IsValidPlayerId(targetPlayer)) return false;
+    std::unique_lock<std::mutex> lock(lock_);
     auto& state = playerRoles_[targetPlayer];
     state.visible = toggle;
 
     Logger::Info("[VISIBILITY] SetPlayerRoleVisible: targetPlayer=%d, visible=%d (Undercover/AdminDuty), toPlayer=%d",
                  targetPlayer, toggle ? 1 : 0, toPlayer);
 
-    broadcastRoleUpdate(toPlayer, targetPlayer, state);
+    const PlayerRoleState snapshot = state;
+    lock.unlock();
+    broadcastRoleUpdate(toPlayer, targetPlayer, snapshot);
     return true;
 }
 
@@ -409,6 +503,7 @@ bool RoleComponent::setPlayerRoleVisible(int targetPlayer, bool toggle, int toPl
 // -----------------------------------------------------------------------------
 
 bool RoleComponent::hasPlayerRole(int playerid, int slotID) const {
+    if (!IsValidPlayerId(playerid)) return false;
     std::lock_guard<std::mutex> lock(lock_);
     auto it = playerRoles_.find(playerid);
     if (it != playerRoles_.end()) {
@@ -420,6 +515,7 @@ bool RoleComponent::hasPlayerRole(int playerid, int slotID) const {
 }
 
 bool RoleComponent::isPlayerRoleVisible(int playerid) const {
+    if (!IsValidPlayerId(playerid)) return false;
     std::lock_guard<std::mutex> lock(lock_);
     auto it = playerRoles_.find(playerid);
     if (it != playerRoles_.end()) {
@@ -429,12 +525,22 @@ bool RoleComponent::isPlayerRoleVisible(int playerid) const {
 }
 
 const PlayerRoleState* RoleComponent::getPlayerRoleState(int playerid) const {
-    std::lock_guard<std::mutex> lock(lock_);
+    if (!IsValidPlayerId(playerid)) return nullptr;
+    thread_local PlayerRoleState snapshot;
+    std::unique_lock<std::mutex> lock(lock_);
     auto it = playerRoles_.find(playerid);
     if (it != playerRoles_.end()) {
-        return &it->second;
+        snapshot = it->second;
+        return &snapshot;
     }
     return nullptr;
+}
+
+IPawnScript* RoleComponent::getPawnScript(AMX* amx) const {
+    if (!amx) return nullptr;
+    std::unique_lock<std::mutex> lock(lock_);
+    const auto script = pawnScripts_.find(amx);
+    return script != pawnScripts_.end() ? script->second : nullptr;
 }
 
 // -----------------------------------------------------------------------------
@@ -442,66 +548,75 @@ const PlayerRoleState* RoleComponent::getPlayerRoleState(int playerid) const {
 // -----------------------------------------------------------------------------
 
 void RoleComponent::triggerOnRoleResourceLoaded(int playerid, const std::string& key, bool success) {
-    (void)playerid;
-    (void)key;
-    (void)success;
+    if (!pawn_) return;
+
+    auto invoke = [&](IPawnScript* script) {
+        if (!script) return;
+        int publicIndex = 0;
+        if (script->FindPublic("OnRoleResourceLoaded", &publicIndex) != AMX_ERR_NONE) return;
+
+        cell stringAddress = 0;
+        cell* physicalAddress = nullptr;
+        script->Push(success ? 1 : 0);
+        script->PushString(&stringAddress, &physicalAddress, StringView(key), false, false);
+        script->Push(playerid);
+        cell result = 0;
+        script->Exec(&result, publicIndex);
+        if (stringAddress != 0) script->Release(stringAddress);
+    };
+
+    invoke(pawn_->mainScript());
+    for (IPawnScript* script : pawn_->sideScripts()) invoke(script);
 }
 
 void RoleComponent::triggerOnPlayerRoleExpired(int playerid, int slotID) {
-    (void)playerid;
-    (void)slotID;
+    if (!pawn_) return;
+
+    auto invoke = [&](IPawnScript* script) {
+        if (!script) return;
+        int publicIndex = 0;
+        if (script->FindPublic("OnPlayerRoleExpired", &publicIndex) != AMX_ERR_NONE) return;
+        script->Push(slotID);
+        script->Push(playerid);
+        cell result = 0;
+        script->Exec(&result, publicIndex);
+    };
+
+    invoke(pawn_->mainScript());
+    for (IPawnScript* script : pawn_->sideScripts()) invoke(script);
 }
 
-uint32_t RoleComponent::HSVtoARGB(float h, float s, float v, uint8_t alpha) {
-    float c = v * s;
-    float x = c * (1.0f - std::fabs(std::fmod(h / 60.0f, 2.0f) - 1.0f));
-    float m = v - c;
-    float r = 0, g = 0, b = 0;
+void RoleComponent::onTick(Microseconds elapsed, TimePoint now) {
+    (void)elapsed;
+    (void)now;
 
-    if (h >= 0 && h < 60)       { r = c; g = x; b = 0; }
-    else if (h >= 60 && h < 120){ r = x; g = c; b = 0; }
-    else if (h >= 120 && h < 180){ r = 0; g = c; b = x; }
-    else if (h >= 180 && h < 240){ r = 0; g = x; b = c; }
-    else if (h >= 240 && h < 300){ r = x; g = 0; b = c; }
-    else                        { r = c; g = 0; b = x; }
+    const auto steadyNow = std::chrono::steady_clock::now();
+    if (steadyNow - lastExpiryCheck_ < std::chrono::milliseconds(100)) return;
+    lastExpiryCheck_ = steadyNow;
 
-    uint8_t R = static_cast<uint8_t>((r + m) * 255.0f);
-    uint8_t G = static_cast<uint8_t>((g + m) * 255.0f);
-    uint8_t B = static_cast<uint8_t>((b + m) * 255.0f);
-
-    return (static_cast<uint32_t>(alpha) << 24) | (static_cast<uint32_t>(R) << 16) | (static_cast<uint32_t>(G) << 8) | static_cast<uint32_t>(B);
-}
-
-void RoleComponent::workerLoop() {
-    while (running_) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        auto now = std::chrono::steady_clock::now();
-
+    std::vector<std::tuple<int, int, PlayerRoleState>> expiredRoles;
+    std::vector<std::tuple<int, std::string, bool>> resourceCallbacks;
+    {
         std::lock_guard<std::mutex> lock(lock_);
-        for (auto& [pid, state] : playerRoles_) {
-            for (int s = 0; s < MAX_ROLE_SLOTS; ++s) {
-                auto& slot = state.slots[s];
-                if (slot.active && slot.isTimed && now >= slot.expireTime) {
-                    Logger::Info("[TIMED ROLE EXPIRED] Player ID %d, Slot %d role '%s' expired. Clearing slot.", pid, s, slot.text.c_str());
-                    slot = RoleSlotData{};
-                    triggerOnPlayerRoleExpired(pid, s);
-                    broadcastRoleUpdate(-1, pid, state);
-                }
-            }
-
-            if (state.isNametagRainbow) {
-                state.nametagRainbowHue = (state.nametagRainbowHue + 5) % 360;
-                state.nametagColor = HSVtoARGB(static_cast<float>(state.nametagRainbowHue), 1.0f, 1.0f);
-            }
-
-            for (int s = 0; s < MAX_ROLE_SLOTS; ++s) {
-                auto& slot = state.slots[s];
-                if (slot.active && slot.isRainbow) {
-                    slot.currentHue = (slot.currentHue + 5) % 360;
-                    slot.color = HSVtoARGB(static_cast<float>(slot.currentHue), 1.0f, 1.0f);
-                }
+        resourceCallbacks.swap(pendingResourceCallbacks_);
+        for (auto& [playerId, state] : playerRoles_) {
+            for (int slotId = 0; slotId < MAX_ROLE_SLOTS; ++slotId) {
+                RoleSlotData& slot = state.slots[slotId];
+                if (!slot.active || !slot.isTimed || steadyNow < slot.expireTime) continue;
+                Logger::Info("[TIMED ROLE EXPIRED] Player ID %d, Slot %d role '%s' expired.",
+                    playerId, slotId, slot.text.c_str());
+                slot = RoleSlotData{};
+                expiredRoles.emplace_back(playerId, slotId, state);
             }
         }
+    }
+
+    for (const auto& [playerId, key, success] : resourceCallbacks) {
+        triggerOnRoleResourceLoaded(playerId, key, success);
+    }
+    for (const auto& [playerId, slotId, state] : expiredRoles) {
+        triggerOnPlayerRoleExpired(playerId, slotId);
+        broadcastRoleUpdate(-1, playerId, state);
     }
 }
 
@@ -519,10 +634,6 @@ void RoleComponent::broadcastRoleUpdate(int toPlayer, int targetPlayer, const Pl
         buf.push_back(slot.active ? 1 : 0);
 
         if (slot.active) {
-            uint8_t textLen = static_cast<uint8_t>(slot.text.length());
-            buf.push_back(textLen);
-            buf.insert(buf.end(), slot.text.begin(), slot.text.end());
-
             uint32_t color = slot.color;
             buf.insert(buf.end(), reinterpret_cast<const uint8_t*>(&color), reinterpret_cast<const uint8_t*>(&color) + sizeof(color));
 
@@ -531,40 +642,44 @@ void RoleComponent::broadcastRoleUpdate(int toPlayer, int targetPlayer, const Pl
 
             buf.push_back(slot.stroke ? 1 : 0);
 
-            uint8_t imgLen = static_cast<uint8_t>(slot.imagePath.length());
-            buf.push_back(imgLen);
-            buf.insert(buf.end(), slot.imagePath.begin(), slot.imagePath.end());
+            const size_t safeTextLength = (std::min)(slot.text.size(), size_t{63});
+            buf.push_back(static_cast<uint8_t>(safeTextLength));
+            buf.insert(buf.end(), slot.text.begin(), slot.text.begin() + safeTextLength);
+
+            const size_t safeImageLength = (std::min)(slot.imagePath.size(), size_t{255});
+            buf.push_back(static_cast<uint8_t>(safeImageLength));
+            buf.insert(buf.end(), slot.imagePath.begin(), slot.imagePath.begin() + safeImageLength);
         }
 
-        Span<uint8_t> packetSpan(buf.data(), buf.size());
+        Span<uint8_t> packetSpan(buf.data(), buf.size() * 8);
 
         if (toPlayer == -1) {
             for (IPlayer* p : core_->getPlayers().entries()) {
-                if (p) p->sendPacket(packetSpan, 0);
+                if (p) p->sendPacket(packetSpan, 0, false);
             }
         } else {
             IPlayer* p = core_->getPlayers().get(toPlayer);
-            if (p) p->sendPacket(packetSpan, 0);
+            if (p) p->sendPacket(packetSpan, 0, false);
         }
     }
 
     // 2. Pack Packet 226 (Nametag Custom Color)
-    if (state.hasCustomNametagColor) {
+    {
         std::vector<uint8_t> buf;
         buf.push_back(226); // kPktNametagColor
         uint16_t targetId = static_cast<uint16_t>(targetPlayer);
         buf.insert(buf.end(), reinterpret_cast<const uint8_t*>(&targetId), reinterpret_cast<const uint8_t*>(&targetId) + sizeof(targetId));
-        uint32_t color = state.nametagColor;
+        uint32_t color = state.hasCustomNametagColor ? state.nametagColor : 0xFFFFFFFF;
         buf.insert(buf.end(), reinterpret_cast<const uint8_t*>(&color), reinterpret_cast<const uint8_t*>(&color) + sizeof(color));
 
-        Span<uint8_t> packetSpan(buf.data(), buf.size());
+        Span<uint8_t> packetSpan(buf.data(), buf.size() * 8);
         if (toPlayer == -1) {
             for (IPlayer* p : core_->getPlayers().entries()) {
-                if (p) p->sendPacket(packetSpan, 0);
+                if (p) p->sendPacket(packetSpan, 0, false);
             }
         } else {
             IPlayer* p = core_->getPlayers().get(toPlayer);
-            if (p) p->sendPacket(packetSpan, 0);
+            if (p) p->sendPacket(packetSpan, 0, false);
         }
     }
 
@@ -576,59 +691,59 @@ void RoleComponent::broadcastRoleUpdate(int toPlayer, int targetPlayer, const Pl
         buf.insert(buf.end(), reinterpret_cast<const uint8_t*>(&targetId), reinterpret_cast<const uint8_t*>(&targetId) + sizeof(targetId));
         buf.push_back(state.visible ? 1 : 0);
 
-        Span<uint8_t> packetSpan(buf.data(), buf.size());
+        Span<uint8_t> packetSpan(buf.data(), buf.size() * 8);
         if (toPlayer == -1) {
             for (IPlayer* p : core_->getPlayers().entries()) {
-                if (p) p->sendPacket(packetSpan, 0);
+                if (p) p->sendPacket(packetSpan, 0, false);
             }
         } else {
             IPlayer* p = core_->getPlayers().get(toPlayer);
-            if (p) p->sendPacket(packetSpan, 0);
+            if (p) p->sendPacket(packetSpan, 0, false);
         }
     }
 
     // 4. Pack Packet 225 (Rainbow Effect per slot & nametag)
-    if (state.isNametagRainbow) {
+    {
         std::vector<uint8_t> buf;
         buf.push_back(225); // kPktSetRainbow
         uint16_t targetId = static_cast<uint16_t>(targetPlayer);
         buf.insert(buf.end(), reinterpret_cast<const uint8_t*>(&targetId), reinterpret_cast<const uint8_t*>(&targetId) + sizeof(targetId));
         int8_t slotID = -1;
         buf.push_back(static_cast<uint8_t>(slotID));
-        buf.push_back(1); // toggle
-        uint16_t speed = static_cast<uint16_t>(state.nametagRainbowSpeedMs);
+        buf.push_back(state.isNametagRainbow ? 1 : 0);
+        uint32_t speed = state.nametagRainbowSpeedMs;
         buf.insert(buf.end(), reinterpret_cast<const uint8_t*>(&speed), reinterpret_cast<const uint8_t*>(&speed) + sizeof(speed));
 
-        Span<uint8_t> packetSpan(buf.data(), buf.size());
+        Span<uint8_t> packetSpan(buf.data(), buf.size() * 8);
         if (toPlayer == -1) {
             for (IPlayer* p : core_->getPlayers().entries()) {
-                if (p) p->sendPacket(packetSpan, 0);
+                if (p) p->sendPacket(packetSpan, 0, false);
             }
         } else {
             IPlayer* p = core_->getPlayers().get(toPlayer);
-            if (p) p->sendPacket(packetSpan, 0);
+            if (p) p->sendPacket(packetSpan, 0, false);
         }
     }
 
     for (int8_t s = 0; s < MAX_ROLE_SLOTS; ++s) {
-        if (state.slots[s].isRainbow) {
+        {
             std::vector<uint8_t> buf;
             buf.push_back(225); // kPktSetRainbow
             uint16_t targetId = static_cast<uint16_t>(targetPlayer);
             buf.insert(buf.end(), reinterpret_cast<const uint8_t*>(&targetId), reinterpret_cast<const uint8_t*>(&targetId) + sizeof(targetId));
             buf.push_back(static_cast<uint8_t>(s));
-            buf.push_back(1); // toggle
-            uint16_t speed = static_cast<uint16_t>(state.slots[s].rainbowSpeedMs);
+            buf.push_back(state.slots[s].isRainbow ? 1 : 0);
+            uint32_t speed = state.slots[s].rainbowSpeedMs;
             buf.insert(buf.end(), reinterpret_cast<const uint8_t*>(&speed), reinterpret_cast<const uint8_t*>(&speed) + sizeof(speed));
 
-            Span<uint8_t> packetSpan(buf.data(), buf.size());
+            Span<uint8_t> packetSpan(buf.data(), buf.size() * 8);
             if (toPlayer == -1) {
                 for (IPlayer* p : core_->getPlayers().entries()) {
-                    if (p) p->sendPacket(packetSpan, 0);
+                    if (p) p->sendPacket(packetSpan, 0, false);
                 }
             } else {
                 IPlayer* p = core_->getPlayers().get(toPlayer);
-                if (p) p->sendPacket(packetSpan, 0);
+                if (p) p->sendPacket(packetSpan, 0, false);
             }
         }
     }
@@ -636,4 +751,6 @@ void RoleComponent::broadcastRoleUpdate(int toPlayer, int targetPlayer, const Pl
 
 } // namespace HUBRole
 
-COMPONENT_ENTRY_POINT(HUBRole::RoleComponent);
+COMPONENT_ENTRY_POINT() {
+    return new HUBRole::RoleComponent();
+}

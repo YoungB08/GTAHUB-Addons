@@ -13,6 +13,8 @@
 #include <mutex>
 #include <thread>
 #include <atomic>
+#include <vector>
+#include <tuple>
 
 namespace HUBRole {
 
@@ -49,19 +51,24 @@ public:
     virtual const PlayerRoleState* getPlayerRoleState(int playerid) const = 0;
 };
 
-class RoleComponent final : public IRoleComponent, public PlayerConnectEventHandler {
+class RoleComponent final : public IRoleComponent,
+                            public PlayerConnectEventHandler,
+                            public CoreEventHandler,
+                            public SingleNetworkInEventHandler {
 private:
     ICore* core_ = nullptr;
     IPawnComponent* pawn_ = nullptr;
+    PawnEventHandler* pawnEventHandler_ = nullptr;
 
     mutable std::mutex lock_;
     GlobalConfig config_;
     std::unordered_map<int, PlayerRoleState> playerRoles_;
     std::unordered_map<std::string, RoleResourceData> registeredResources_;
+    std::unordered_map<AMX*, IPawnScript*> pawnScripts_;
 
-    // Background worker thread for timed roles & rainbow ticks
-    std::atomic<bool> running_{ false };
-    std::thread workerThread_;
+    std::chrono::steady_clock::time_point lastExpiryCheck_{};
+    std::vector<std::thread> downloadThreads_;
+    std::vector<std::tuple<int, std::string, bool>> pendingResourceCallbacks_;
 
 public:
     RoleComponent() = default;
@@ -77,6 +84,10 @@ public:
 
     void onPlayerConnect(IPlayer& player) override;
     void onPlayerDisconnect(IPlayer& player, PeerDisconnectReason reason) override;
+    void onTick(Microseconds elapsed, TimePoint now) override;
+    void onAmxLoad(IPawnScript& script);
+    void onAmxUnload(IPawnScript& script);
+    bool onReceive(IPlayer& peer, NetworkBitStream& bs) override;
 
     // IRoleComponent implementation
     bool addRoleResource(std::string_view resourceKey, std::string_view url) override;
@@ -99,6 +110,7 @@ public:
     bool hasPlayerRole(int playerid, int slotID) const override;
     bool isPlayerRoleVisible(int playerid) const override;
     const PlayerRoleState* getPlayerRoleState(int playerid) const override;
+    IPawnScript* getPawnScript(AMX* amx) const;
 
     // Pawn Callbacks helper
     void triggerOnRoleResourceLoaded(int playerid, const std::string& key, bool success);
@@ -106,11 +118,10 @@ public:
 
 private:
     void downloadResourceAsync(std::string key, std::string url, std::string localPath);
-    void workerLoop();
     void broadcastRoleUpdate(int toPlayer, int targetPlayer, const PlayerRoleState& state);
-    static uint32_t HSVtoARGB(float h, float s, float v, uint8_t alpha = 255);
 };
 
 RoleComponent* GetRoleComponent();
+void RegisterRoleNatives(IPawnScript& script);
 
 } // namespace HUBRole

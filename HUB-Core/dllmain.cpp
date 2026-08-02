@@ -5,74 +5,128 @@
 #include "pch.h"
 #include "D3DHook.h"
 #include "Network.h"
-#include "PlayerData.h"
 #include "RoleConfig.h"
-#include "TextureCache.h"
 
+#include <sampapi/0.3.DL-1/CChat.h>
 #include <sampapi/0.3.DL-1/CNetGame.h>
 #include <sampapi/0.3.DL-1/CPlayerTags.h>
-#include <sampapi/0.3.DL-1/CChat.h>
-#include <thread>
 #include <chrono>
+#include <cstring>
+#include <psapi.h>
+#include <thread>
+
+#pragma comment(lib, "Psapi.lib")
 
 using namespace sampapi::v03dl;
 
 #ifndef HUB_CORE_VERSION_STRING
-#define HUB_CORE_VERSION_STRING "4.0.0 (open:mp Multi-Slot Async)"
+#define HUB_CORE_VERSION_STRING "1.1.0"
 #endif
 
-static bool s_bSpawnMessageSent = false;
+static bool s_SpawnMessageSent = false;
+
+static uintptr_t FindPattern(HMODULE module, const unsigned char* pattern, size_t patternSize) {
+    MODULEINFO moduleInfo{};
+    if (!GetModuleInformation(GetCurrentProcess(), module, &moduleInfo, sizeof(moduleInfo)) ||
+        moduleInfo.SizeOfImage < patternSize) {
+        return 0;
+    }
+
+    const auto baseAddress = reinterpret_cast<uintptr_t>(module);
+    const auto imageSize = static_cast<size_t>(moduleInfo.SizeOfImage);
+    for (size_t offset = 0; offset + patternSize <= imageSize; ++offset) {
+        const auto address = baseAddress + offset;
+        if (std::memcmp(reinterpret_cast<const void*>(address), pattern, patternSize) == 0) {
+            return address;
+        }
+    }
+
+    return 0;
+}
+
+static bool PatchVehicleLimit() {
+    HMODULE sampModule = GetModuleHandleA("samp.dll");
+    if (!sampModule) {
+        return false;
+    }
+
+    static constexpr unsigned char pattern[] = {
+        0x3D, 0x90, 0x01, 0x00, 0x00, 0x0F, 0x8C, 0x32, 0x01, 0x00, 0x00,
+        0x3D, 0x63, 0x02, 0x00, 0x00, 0x0F, 0x8F, 0x27, 0x01, 0x00, 0x00
+    };
+
+    const uintptr_t patternAddress = FindPattern(sampModule, pattern, sizeof(pattern));
+    if (!patternAddress) {
+        Log("Vehicle limit patch: SAMP pattern not found.");
+        return true;
+    }
+
+    constexpr DWORD newLimit = 8000;
+    const uintptr_t limitAddress = patternAddress + 12;
+    DWORD oldProtect = 0;
+    if (!VirtualProtect(reinterpret_cast<void*>(limitAddress), sizeof(newLimit), PAGE_EXECUTE_READWRITE, &oldProtect)) {
+        Log("Vehicle limit patch: VirtualProtect failed.");
+        return true;
+    }
+
+    std::memcpy(reinterpret_cast<void*>(limitAddress), &newLimit, sizeof(newLimit));
+    FlushInstructionCache(GetCurrentProcess(), reinterpret_cast<void*>(limitAddress), sizeof(newLimit));
+
+    DWORD unusedProtect = 0;
+    VirtualProtect(reinterpret_cast<void*>(limitAddress), sizeof(newLimit), oldProtect, &unusedProtect);
+    Log("Vehicle limit patch applied: 611 -> %lu.", static_cast<unsigned long>(newLimit));
+    return true;
+}
 
 static DWORD WINAPI MainThread(LPVOID lpParam) {
     (void)lpParam;
+    ClearLog();
     Log("=================================================================");
     Log("   GTAHUB Client Core (HUB-Core.asi v%s) Initializing...", HUB_CORE_VERSION_STRING);
     Log("=================================================================");
 
     RoleConfig::InitDefaults();
-
-    int loopCount = 0;
+    bool vehicleLimitPatchAttempted = false;
+    bool roleDataRequested = false;
     while (true) {
         std::this_thread::sleep_for(std::chrono::milliseconds(250));
-        loopCount++;
 
-        CNetGame* pNet = GetRefNetGame();
-        if (pNet) {
-            if (!D3DHook::IsInstalled()) {
-                sampapi::v03dl::CPlayerTags* pTags = sampapi::v03dl::RefPlayerTags();
-                if (pTags && pTags->m_pDevice) {
-                    D3DHook::Install(pTags->m_pDevice);
-                    Log("D3DHook installed successfully.");
-                }
-            }
+        if (!vehicleLimitPatchAttempted) {
+            vehicleLimitPatchAttempted = PatchVehicleLimit();
+        }
 
-            if (!Network::IsReady()) {
-                Network::Init();
-                if (Network::IsReady()) {
-                    Log("Network initialized.");
-                }
-            }
+        CNetGame* netGame = GetRefNetGame();
+        CPlayerTags* playerTags = GetRefPlayerTags();
+        if (playerTags && playerTags->m_pDevice && !D3DHook::IsInstalled()) {
+            D3DHook::Install(playerTags->m_pDevice);
+        }
 
-            CPlayerPool* pPlayerPool = pNet->GetPlayerPool();
-            if (pPlayerPool) {
-                CLocalPlayer* pLocalPlayer = pPlayerPool->GetLocalPlayer();
-                if (pLocalPlayer && pLocalPlayer->m_bIsActive) {
-                    if (!s_bSpawnMessageSent) {
-                        if (Network::IsReady()) {
-                            Network::RequestData();
-                        }
+        if (netGame && !Network::IsReady()) {
+            Network::Init();
+        }
 
-                        CChat* pChat = GetRefChat();
-                        if (pChat) {
-                            pChat->AddMessage(0x00FF00FF, "[HUB-Core] HUBCore.asi Version: " HUB_CORE_VERSION_STRING);
-                            s_bSpawnMessageSent = true;
-                            Log("Sent spawn message to CChat: HUBCore.asi Version %s", HUB_CORE_VERSION_STRING);
-                        }
-                    }
-                } else {
-                    s_bSpawnMessageSent = false;
-                }
-            }
+        bool localPlayerActive = false;
+        if (netGame) {
+            CPlayerPool* playerPool = netGame->GetPlayerPool();
+            CLocalPlayer* localPlayer = playerPool ? playerPool->GetLocalPlayer() : nullptr;
+            localPlayerActive = localPlayer && localPlayer->m_bIsActive;
+        }
+
+        if (localPlayerActive && Network::IsReady() && !roleDataRequested) {
+            Network::RequestData();
+            roleDataRequested = true;
+            Log("Requested role state from server.");
+        } else if (!localPlayerActive) {
+            roleDataRequested = false;
+        }
+
+        CChat* pChat = GetRefChat();
+        if (pChat && !s_SpawnMessageSent) {
+            pChat->AddMessage(0x00FF00FF, "[HUB-Core] HUBCore.asi Version: " HUB_CORE_VERSION_STRING);
+            s_SpawnMessageSent = true;
+            Log("Sent CChat startup message: HUBCore.asi Version %s", HUB_CORE_VERSION_STRING);
+        } else if (!pChat) {
+            s_SpawnMessageSent = false;
         }
     }
 
@@ -89,7 +143,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
         case DLL_PROCESS_DETACH:
             Network::Shutdown();
             D3DHook::Uninstall();
-            TextureCache::ReleaseAll();
             break;
     }
     return TRUE;

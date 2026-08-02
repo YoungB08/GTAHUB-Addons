@@ -8,6 +8,7 @@
 #include <array>
 #include <d3d9.h>
 #include <cmath>
+#include <mutex>
 
 /// Số player tối đa trong SAMP / open:mp
 constexpr int kMaxPlayers = 1004;
@@ -54,6 +55,7 @@ struct PlayerNametag {
 
 /// Global array lưu trữ trạng thái người chơi, index = playerID (0–1003)
 inline std::array<PlayerNametag, kMaxPlayers> g_Players;
+inline std::mutex g_PlayerDataMutex;
 
 /**
  * @brief Helper đổi góc màu HSV sang D3DCOLOR (ARGB).

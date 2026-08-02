@@ -13,7 +13,7 @@
 #define HUB_CORE_VERSION_PATCH 0
 #define HUB_CORE_VERSION_STRING "1.1.0"
 
-namespace sampapi { namespace v03dl { class CNetGame; class CChat; } }
+namespace sampapi { namespace v03dl { class CNetGame; class CChat; class CPlayerTags; } }
 
 inline sampapi::v03dl::CNetGame* GetRefNetGame() {
     HMODULE hSamp = GetModuleHandleA("samp.dll");
@@ -55,6 +55,28 @@ inline sampapi::v03dl::CChat* GetRefChat() {
 
     auto ppChat = reinterpret_cast<sampapi::v03dl::CChat**>(base + offset);
     return (ppChat) ? *ppChat : nullptr;
+}
+
+inline sampapi::v03dl::CPlayerTags*& GetRefPlayerTags() {
+    HMODULE hSamp = GetModuleHandleA("samp.dll");
+    static sampapi::v03dl::CPlayerTags* s_NullTags = nullptr;
+    if (!hSamp) return s_NullTags;
+
+    auto base = reinterpret_cast<uintptr_t>(hSamp);
+    PIMAGE_DOS_HEADER dos = reinterpret_cast<PIMAGE_DOS_HEADER>(base);
+    if (!dos || dos->e_magic != IMAGE_DOS_SIGNATURE) return s_NullTags;
+    PIMAGE_NT_HEADERS nt = reinterpret_cast<PIMAGE_NT_HEADERS>(base + dos->e_lfanew);
+    if (!nt || nt->Signature != IMAGE_NT_SIGNATURE) return s_NullTags;
+
+    DWORD size = nt->OptionalHeader.SizeOfImage;
+
+    uintptr_t offset = 0x21A0B0; // 0.3.7-R1
+    if (size >= 0x2A0000)      offset = 0x2AC9D8; // 0.3.DL-1
+    else if (size >= 0x26EA00) offset = 0x26EB48; // 0.3.7-R5
+    else if (size >= 0x26E000) offset = 0x26E890; // 0.3.7-R3
+
+    auto ppTags = reinterpret_cast<sampapi::v03dl::CPlayerTags**>(base + offset);
+    return (ppTags) ? *ppTags : s_NullTags;
 }
 
 struct SAMPVersionInfo {

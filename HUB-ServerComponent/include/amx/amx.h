@@ -3,8 +3,10 @@
 
 #if defined(_WIN32) || defined(_WIN64)
     #define AMXAPI __stdcall
+    #define AMX_NATIVE_CALL __cdecl
 #else
     #define AMXAPI
+    #define AMX_NATIVE_CALL
 #endif
 
 typedef int32_t cell;
@@ -43,7 +45,7 @@ enum {
 
 struct AMX;
 
-typedef cell (AMXAPI *AMX_NATIVE)(struct AMX *amx, const cell *params);
+typedef cell (AMX_NATIVE_CALL *AMX_NATIVE)(struct AMX *amx, const cell *params);
 typedef int (AMXAPI *AMX_CALLBACK)(struct AMX *amx, cell index, cell *result, const cell *params);
 typedef int (AMXAPI *AMX_DEBUG)(struct AMX *amx);
 
@@ -77,12 +79,13 @@ struct AMX_HEADER {
     int32_t tags;
     int32_t nametable;
 };
+#pragma pack(pop)
 
 struct AMX {
     uint8_t* base;
     uint8_t* data;
     AMX_CALLBACK callback;
-    AMX_NATIVE debug;
+    AMX_DEBUG debug;
     cell cip;
     cell frm;
     cell hea;
@@ -98,6 +101,5 @@ struct AMX {
     cell alt;
     cell reset_stk;
     cell reset_hea;
-    AMX_NATIVE sysreq_d;
+    cell sysreq_d;
 };
-#pragma pack(pop)

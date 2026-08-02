@@ -178,6 +178,7 @@
     <ClInclude Include="Nametag.h" />
     <ClInclude Include="Network.h" />
     <ClInclude Include="PlayerData.h" />
+    <ClInclude Include="RoleConfig.h" />
     <ClInclude Include="TextureCache.h" />
     <ClInclude Include="W2S.h" />
     <ClInclude Include="pch.h" />

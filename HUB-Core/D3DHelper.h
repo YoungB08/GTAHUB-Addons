@@ -10,6 +10,7 @@
 #include <cstring>
 #include <cmath>
 #include <algorithm>
+#include <string>
 
 namespace D3DHelper {
 
@@ -218,6 +219,44 @@ inline void DrawTextStroke(ID3DXFont* font, const char* text,
     font->DrawTextA(NULL, text, -1, &rect, fmt, textColor);
 }
 
+inline std::wstring Utf8ToWide(const std::string& text) {
+    if (text.empty()) return {};
+
+    int length = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(),
+        static_cast<int>(text.size()), nullptr, 0);
+    UINT codePage = CP_UTF8;
+    DWORD flags = MB_ERR_INVALID_CHARS;
+    if (length <= 0) {
+        codePage = CP_ACP;
+        flags = 0;
+        length = MultiByteToWideChar(codePage, flags, text.data(),
+            static_cast<int>(text.size()), nullptr, 0);
+    }
+    if (length <= 0) return {};
+
+    std::wstring result(static_cast<size_t>(length), L'\0');
+    MultiByteToWideChar(codePage, flags, text.data(), static_cast<int>(text.size()),
+        result.data(), length);
+    return result;
+}
+
+inline void DrawTextStrokeW(ID3DXFont* font, const wchar_t* text,
+    RECT rect, DWORD format, D3DCOLOR textColor, D3DCOLOR strokeColor)
+{
+    if (!font || !text) return;
+    static constexpr int offsets[8][2] = {
+        {-1, -1}, {0, -1}, {1, -1}, {-1, 0},
+        {1, 0}, {-1, 1}, {0, 1}, {1, 1}
+    };
+
+    for (const auto& offset : offsets) {
+        RECT shifted = rect;
+        OffsetRect(&shifted, offset[0], offset[1]);
+        font->DrawTextW(nullptr, text, -1, &shifted, format, strokeColor);
+    }
+    font->DrawTextW(nullptr, text, -1, &rect, format, textColor);
+}
+
 /**
  * @brief Đo chiều rộng và cao của text khi dùng D3DXFont.
  */
@@ -229,6 +268,16 @@ inline SIZE MeasureText(ID3DXFont* font, const char* text) {
     sz.cx = r.right - r.left;
     sz.cy = r.bottom - r.top;
     return sz;
+}
+
+inline SIZE MeasureTextW(ID3DXFont* font, const wchar_t* text) {
+    SIZE size = {0, 0};
+    if (!font || !text) return size;
+    RECT rect = {0, 0, 0, 0};
+    font->DrawTextW(nullptr, text, -1, &rect, DT_CALCRECT, 0);
+    size.cx = rect.right - rect.left;
+    size.cy = rect.bottom - rect.top;
+    return size;
 }
 
 } // namespace D3DHelper

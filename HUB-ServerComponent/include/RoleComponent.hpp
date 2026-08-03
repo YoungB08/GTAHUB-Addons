@@ -64,6 +64,8 @@ private:
     GlobalConfig config_;
     std::unordered_map<int, PlayerRoleState> playerRoles_;
     std::unordered_map<std::string, RoleResourceData> registeredResources_;
+    struct ChatChannelData { std::string name; uint32_t color = 0xFFFFFFFF; };
+    std::unordered_map<uint16_t, ChatChannelData> chatChannels_;
     std::unordered_map<AMX*, IPawnScript*> pawnScripts_;
 
     std::chrono::steady_clock::time_point lastExpiryCheck_{};
@@ -112,6 +114,12 @@ public:
     const PlayerRoleState* getPlayerRoleState(int playerid) const override;
     IPawnScript* getPawnScript(AMX* amx) const;
 
+    bool addChatChannel(uint16_t channelId, std::string_view name, uint32_t color);
+    bool removeChatChannel(uint16_t channelId);
+    bool sendChatMessage(int toPlayer, uint16_t channelId, uint32_t color, std::string_view message);
+    bool setPlayerChatChannel(int playerId, uint16_t channelId);
+    bool clearPlayerChatChannel(int playerId, uint16_t channelId);
+
     // Pawn Callbacks helper
     void triggerOnRoleResourceLoaded(int playerid, const std::string& key, bool success);
     void triggerOnPlayerRoleExpired(int playerid, int slotID);
@@ -119,6 +127,7 @@ public:
 private:
     void downloadResourceAsync(std::string key, std::string url, std::string localPath);
     void broadcastRoleUpdate(int toPlayer, int targetPlayer, const PlayerRoleState& state);
+    void sendChatChannels(int toPlayer);
 };
 
 RoleComponent* GetRoleComponent();

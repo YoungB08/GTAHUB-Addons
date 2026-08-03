@@ -75,17 +75,20 @@ bool AcquireFrame() {
 }
 
 void SuppressNativeNametags(CNetGame* netGame, CPlayerPool* playerPool) {
-    netGame->m_bNametagStatus = false;
+    if (!netGame) return;
     if (netGame->m_pSettings) {
         netGame->m_pSettings->m_bNameTags = false;
         netGame->m_pSettings->m_fNameTagsDrawDist = 0.0f;
     }
 
     if (!playerPool) return;
+    const sampapi::ID localId = playerPool->m_nLocalPlayerId;
     for (int playerId = 0; playerId < kMaxPlayers; ++playerId) {
-        if (!playerPool->m_bNotEmpty[playerId]) continue;
+        if (playerId == localId || !playerPool->IsConnected(static_cast<sampapi::ID>(playerId))) continue;
         CRemotePlayer* remote = playerPool->GetPlayer(static_cast<sampapi::ID>(playerId));
-        if (remote) remote->m_bDrawLabels = FALSE;
+        if (remote) {
+            remote->m_bDrawLabels = FALSE;
+        }
     }
 }
 
@@ -478,7 +481,7 @@ void Nametag::RenderAll(IDirect3DDevice9* device) {
 
     const sampapi::ID localId = playerPool->m_nLocalPlayerId;
     for (int playerId = 0; playerId < kMaxPlayers; ++playerId) {
-        if (playerId == localId || !playerPool->m_bNotEmpty[playerId]) continue;
+        if (playerId == localId || !playerPool->IsConnected(static_cast<sampapi::ID>(playerId))) continue;
 
         CRemotePlayer* remote = playerPool->GetPlayer(static_cast<sampapi::ID>(playerId));
         if (!remote || !remote->m_pPed || !remote->m_pPed->m_pGamePed) continue;

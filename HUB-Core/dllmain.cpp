@@ -1,13 +1,13 @@
-/**
- * @file dllmain.cpp
- * @brief Entry point DLL cho client ASI GTA SA (HUB-Core.asi).
- */
 #include "pch.h"
+#include "framework.h"
 #include "D3DHook.h"
+#include "HookManager.h"
+#include "Logger.h"
 #include "Network.h"
 #include "RoleConfig.h"
 
 #include <sampapi/0.3.DL-1/CChat.h>
+#include <sampapi/0.3.DL-1/CInput.h>
 #include <sampapi/0.3.DL-1/CNetGame.h>
 #include <sampapi/0.3.DL-1/CPlayerTags.h>
 #include <chrono>
@@ -57,7 +57,7 @@ static bool PatchVehicleLimit() {
 
     const uintptr_t patternAddress = FindPattern(sampModule, pattern, sizeof(pattern));
     if (!patternAddress) {
-        Log("Vehicle limit patch: SAMP pattern not found.");
+        Logger::Info("Vehicle limit patch: SAMP pattern not found.");
         return true;
     }
 
@@ -65,7 +65,7 @@ static bool PatchVehicleLimit() {
     const uintptr_t limitAddress = patternAddress + 12;
     DWORD oldProtect = 0;
     if (!VirtualProtect(reinterpret_cast<void*>(limitAddress), sizeof(newLimit), PAGE_EXECUTE_READWRITE, &oldProtect)) {
-        Log("Vehicle limit patch: VirtualProtect failed.");
+        Logger::Error("Vehicle limit patch: VirtualProtect failed.");
         return true;
     }
 
@@ -74,25 +74,32 @@ static bool PatchVehicleLimit() {
 
     DWORD unusedProtect = 0;
     VirtualProtect(reinterpret_cast<void*>(limitAddress), sizeof(newLimit), oldProtect, &unusedProtect);
-    Log("Vehicle limit patch applied: 611 -> %lu.", static_cast<unsigned long>(newLimit));
+    Logger::Info("Vehicle limit patch applied: 611 -> %lu.", static_cast<unsigned long>(newLimit));
     return true;
 }
 
 static DWORD WINAPI MainThread(LPVOID lpParam) {
     (void)lpParam;
-    ClearLog();
-    Log("=================================================================");
-    Log("   GTAHUB Client Core (HUB-Core.asi v%s) Initializing...", HUB_CORE_VERSION_STRING);
-    Log("=================================================================");
+    Logger::ClearLog();
+    Logger::Info("=================================================================");
+    Logger::Info("   GTAHUB Client Core (HUB-Core.asi v%s) Initializing...", HUB_CORE_VERSION_STRING);
+    Logger::Info("=================================================================");
 
     RoleConfig::InitDefaults();
     bool vehicleLimitPatchAttempted = false;
+    bool hooksInstalledAttempted = false;
     bool roleDataRequested = false;
     while (true) {
         std::this_thread::sleep_for(std::chrono::milliseconds(250));
 
         if (!vehicleLimitPatchAttempted) {
             vehicleLimitPatchAttempted = PatchVehicleLimit();
+        }
+
+        CChat* pChat = GetRefChat();
+        CInput* pInput = GetRefInput();
+        if (!hooksInstalledAttempted && pChat && pInput) {
+            hooksInstalledAttempted = HookManager::Install();
         }
 
         CNetGame* netGame = GetRefNetGame();
@@ -115,16 +122,15 @@ static DWORD WINAPI MainThread(LPVOID lpParam) {
         if (localPlayerActive && Network::IsReady() && !roleDataRequested) {
             Network::RequestData();
             roleDataRequested = true;
-            Log("Requested role state from server.");
+            Logger::Info("Requested role state from server.");
         } else if (!localPlayerActive) {
             roleDataRequested = false;
         }
 
-        CChat* pChat = GetRefChat();
         if (pChat && !s_SpawnMessageSent) {
             pChat->AddMessage(0x00FF00FF, "[HUB-Core] HUBCore.asi Version: " HUB_CORE_VERSION_STRING);
             s_SpawnMessageSent = true;
-            Log("Sent CChat startup message: HUBCore.asi Version %s", HUB_CORE_VERSION_STRING);
+            Logger::Info("Sent CChat startup message: HUBCore.asi Version %s", HUB_CORE_VERSION_STRING);
         } else if (!pChat) {
             s_SpawnMessageSent = false;
         }
@@ -141,6 +147,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
             CreateThread(NULL, 0, MainThread, NULL, 0, NULL);
             break;
         case DLL_PROCESS_DETACH:
+            HookManager::Uninstall();
             Network::Shutdown();
             D3DHook::Uninstall();
             break;

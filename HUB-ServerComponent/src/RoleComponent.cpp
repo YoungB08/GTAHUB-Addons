@@ -33,6 +33,16 @@ static bool IsValidRecipientId(int playerId) {
     return playerId == -1 || IsValidPlayerId(playerId);
 }
 
+static void SendPacketBytes(ICore* core, int toPlayer, std::vector<uint8_t>& bytes) {
+    if (!core || bytes.empty()) return;
+    Span<uint8_t> packet(bytes.data(), bytes.size() * 8);
+    if (toPlayer == -1) {
+        for (IPlayer* player : core->getPlayers().entries()) if (player) player->sendPacket(packet, 0, false);
+    } else if (IPlayer* player = core->getPlayers().get(toPlayer)) {
+        player->sendPacket(packet, 0, false);
+    }
+}
+
 RoleComponent* GetRoleComponent() {
     return s_RoleComponentInstance;
 }
@@ -93,6 +103,7 @@ void RoleComponent::free() {
     s_RoleComponentInstance = nullptr;
     playerRoles_.clear();
     registeredResources_.clear();
+    chatChannels_.clear();
     Logger::Info("[LIFECYCLE] RoleComponent fully unloaded.");
     delete this;
 }
@@ -102,6 +113,7 @@ void RoleComponent::reset() {
     Logger::Info("[SYSTEM] Resetting all stored player roles, resources, and configurations.");
     playerRoles_.clear();
     registeredResources_.clear();
+    chatChannels_.clear();
     config_ = GlobalConfig{};
 }
 
@@ -115,6 +127,7 @@ void RoleComponent::onPlayerConnect(IPlayer& player) {
         for (const auto& [targetId, state] : playerRoles_) states.emplace_back(targetId, state);
     }
     for (const auto& [targetId, state] : states) broadcastRoleUpdate(id, targetId, state);
+    sendChatChannels(id);
     Logger::Info("[PLAYER CONNECT] Player ID %d connected. Role state initialized.", id);
 }
 
@@ -148,7 +161,82 @@ bool RoleComponent::onReceive(IPlayer& peer, NetworkBitStream& bs) {
         for (const auto& [targetId, state] : playerRoles_) states.emplace_back(targetId, state);
     }
     for (const auto& [targetId, state] : states) broadcastRoleUpdate(peer.getID(), targetId, state);
+    sendChatChannels(peer.getID());
     return false;
+}
+
+bool RoleComponent::addChatChannel(uint16_t channelId, std::string_view name, uint32_t color) {
+    if (channelId == 0 || name.empty() || name.size() > 31) return false;
+    {
+        std::lock_guard<std::mutex> lock(lock_);
+        chatChannels_[channelId] = {std::string(name), color};
+    }
+    std::vector<uint8_t> bytes{228};
+    bytes.insert(bytes.end(), reinterpret_cast<uint8_t*>(&channelId), reinterpret_cast<uint8_t*>(&channelId) + sizeof(channelId));
+    bytes.insert(bytes.end(), reinterpret_cast<uint8_t*>(&color), reinterpret_cast<uint8_t*>(&color) + sizeof(color));
+    bytes.push_back(static_cast<uint8_t>(name.size()));
+    bytes.insert(bytes.end(), name.begin(), name.end());
+    SendPacketBytes(core_, -1, bytes);
+    return true;
+}
+
+bool RoleComponent::removeChatChannel(uint16_t channelId) {
+    if (channelId == 0) return false;
+    {
+        std::lock_guard<std::mutex> lock(lock_);
+        if (chatChannels_.erase(channelId) == 0) return false;
+    }
+    std::vector<uint8_t> bytes{229};
+    bytes.insert(bytes.end(), reinterpret_cast<uint8_t*>(&channelId), reinterpret_cast<uint8_t*>(&channelId) + sizeof(channelId));
+    SendPacketBytes(core_, -1, bytes);
+    return true;
+}
+
+bool RoleComponent::sendChatMessage(int toPlayer, uint16_t channelId, uint32_t color, std::string_view message) {
+    if (!IsValidRecipientId(toPlayer) || message.empty() || message.size() > 255) return false;
+    {
+        std::lock_guard<std::mutex> lock(lock_);
+        if (channelId != 0 && channelId != 1 && chatChannels_.find(channelId) == chatChannels_.end()) return false;
+    }
+    std::vector<uint8_t> bytes{230};
+    bytes.insert(bytes.end(), reinterpret_cast<uint8_t*>(&channelId), reinterpret_cast<uint8_t*>(&channelId) + sizeof(channelId));
+    bytes.insert(bytes.end(), reinterpret_cast<uint8_t*>(&color), reinterpret_cast<uint8_t*>(&color) + sizeof(color));
+    bytes.push_back(static_cast<uint8_t>(message.size()));
+    bytes.insert(bytes.end(), message.begin(), message.end());
+    SendPacketBytes(core_, toPlayer, bytes);
+    return true;
+}
+
+bool RoleComponent::setPlayerChatChannel(int playerId, uint16_t channelId) {
+    if (!IsValidPlayerId(playerId)) return false;
+    std::vector<uint8_t> bytes{231};
+    bytes.insert(bytes.end(), reinterpret_cast<uint8_t*>(&channelId), reinterpret_cast<uint8_t*>(&channelId) + sizeof(channelId));
+    SendPacketBytes(core_, playerId, bytes);
+    return true;
+}
+
+bool RoleComponent::clearPlayerChatChannel(int playerId, uint16_t channelId) {
+    if (!IsValidPlayerId(playerId)) return false;
+    std::vector<uint8_t> bytes{232};
+    bytes.insert(bytes.end(), reinterpret_cast<uint8_t*>(&channelId), reinterpret_cast<uint8_t*>(&channelId) + sizeof(channelId));
+    SendPacketBytes(core_, playerId, bytes);
+    return true;
+}
+
+void RoleComponent::sendChatChannels(int toPlayer) {
+    std::vector<std::tuple<uint16_t, std::string, uint32_t>> channels;
+    {
+        std::lock_guard<std::mutex> lock(lock_);
+        for (const auto& [id, channel] : chatChannels_) channels.emplace_back(id, channel.name, channel.color);
+    }
+    for (const auto& [id, name, color] : channels) {
+        std::vector<uint8_t> bytes{228};
+        bytes.insert(bytes.end(), reinterpret_cast<const uint8_t*>(&id), reinterpret_cast<const uint8_t*>(&id) + sizeof(id));
+        bytes.insert(bytes.end(), reinterpret_cast<const uint8_t*>(&color), reinterpret_cast<const uint8_t*>(&color) + sizeof(color));
+        bytes.push_back(static_cast<uint8_t>(name.size()));
+        bytes.insert(bytes.end(), name.begin(), name.end());
+        SendPacketBytes(core_, toPlayer, bytes);
+    }
 }
 
 // -----------------------------------------------------------------------------

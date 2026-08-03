@@ -76,7 +76,13 @@ HRESULT __stdcall HookedPresent(IDirect3DDevice9* device, const RECT* sourceRect
     }
 
     if (device && device->TestCooperativeLevel() == D3D_OK && SUCCEEDED(device->BeginScene())) {
-        Nametag::RenderAll(device);
+        try {
+            Nametag::RenderAll(device);
+        } catch (const std::exception& e) {
+            Log("[EXCEPTION] Nametag::RenderAll: %s", e.what());
+        } catch (...) {
+            Log("[EXCEPTION] Nametag::RenderAll: Unknown Exception");
+        }
         device->EndScene();
     }
     const HRESULT result = g_OriginalPresent(device, sourceRect, destinationRect, destinationWindow, dirtyRegion);

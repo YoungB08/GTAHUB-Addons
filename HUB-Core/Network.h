@@ -28,6 +28,12 @@ constexpr uint8_t kPktSetRainbow    = 225; ///< Server → Client (Set Rainbow E
 constexpr uint8_t kPktNametagColor  = 226; ///< Server → Client (Set Custom Nametag Color)
 constexpr uint8_t kPktSetVisibility = 227; ///< Server → Client (Set Role Visibility / Undercover)
 
+constexpr uint8_t kPktChatChannel   = 228;
+constexpr uint8_t kPktChatRemove    = 229;
+constexpr uint8_t kPktChatMessage   = 230;
+constexpr uint8_t kPktChatActive    = 231;
+constexpr uint8_t kPktChatClear     = 232;
+
 /// Hook RakClientInterface::Receive().
 void Init();
 

@@ -126,6 +126,12 @@ native bool:IsPlayerRoleVisible(playerid);
  */
 native bool:IsRoleResourceLoaded(const resourceKey[]);
 
+native bool:AddChatChannel(channelId, const channelName[], color = 0xFFFFFFFF);
+native bool:RemoveChatChannel(channelId);
+native bool:SendClientChannelMessage(playerid, channelId, color, const message[]);
+native bool:SetPlayerChatChannel(playerid, channelId);
+native bool:ClearPlayerChatChannel(playerid, channelId = 0);
+
 
 /* ========================================================================== */
 /* 6. CALLBACKS                                                               */
@@ -151,3 +157,16 @@ forward OnPlayerRoleExpired(playerid, slotID);
 // Quick Rainbow Macros
 #define SetNametagRainbow(%0,%1)    SetPlayerRainbowRole((%0), (%1), 500, -1)
 #define SetRoleRainbow(%0,%1,%2)    SetPlayerRainbowRole((%0), (%1), 500, (%2))
+
+stock bool:HUB_SendClientMessage(playerid, color, const message[])
+{
+    return SendClientChannelMessage(playerid, 0, color, message);
+}
+
+stock bool:HUB_SendClientMessageToAll(color, const message[])
+{
+    return SendClientChannelMessage(-1, 0, color, message);
+}
+
+#define SendClientMessage HUB_SendClientMessage
+#define SendClientMessageToAll HUB_SendClientMessageToAll

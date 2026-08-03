@@ -219,23 +219,138 @@ inline void DrawTextStroke(ID3DXFont* font, const char* text,
     font->DrawTextA(NULL, text, -1, &rect, fmt, textColor);
 }
 
+inline std::wstring ConvertTCVN3ToWide(const std::string& text) {
+    std::wstring result;
+    result.reserve(text.size());
+
+    for (unsigned char c : text) {
+        wchar_t wc = 0;
+        switch (c) {
+            case 0x80: wc = 0x00E0; break; // à
+            case 0x81: wc = 0x01EA3; break; // ả
+            case 0x82: wc = 0x00E3; break; // ã
+            case 0x83: wc = 0x00E1; break; // á
+            case 0x84: wc = 0x01EA1; break; // ạ
+            case 0x85: wc = 0x0103; break; // ă
+            case 0x86: wc = 0x01EB1; break; // ằ
+            case 0x87: wc = 0x01EB3; break; // ẳ
+            case 0x88: wc = 0x01EB5; break; // ẵ
+            case 0x89: wc = 0x01EB9; break; // ắ
+            case 0x8A: wc = 0x01EB7; break; // ặ
+            case 0x8B: wc = 0x01EC1; break; // ề
+            case 0x8C: wc = 0x01EC3; break; // ể
+            case 0x8D: wc = 0x01EC5; break; // ễ
+            case 0x8E: wc = 0x01EBF; break; // ế
+            case 0x8F: wc = 0x01EC7; break; // ệ
+            case 0x90: wc = 0x01EC9; break; // ỉ
+            case 0x91: wc = 0x01ECB; break; // ị
+            case 0x92: wc = 0x01ECD; break; // ọ
+            case 0x93: wc = 0x01ECF; break; // ỏ
+            case 0x94: wc = 0x01ED7; break; // ỗ
+            case 0x95: wc = 0x01ED5; break; // ố
+            case 0x96: wc = 0x01ED9; break; // ộ
+            case 0x97: wc = 0x01A1;  break; // ơ
+            case 0x98: wc = 0x01EDD; break; // ờ
+            case 0x99: wc = 0x01EDF; break; // ở
+            case 0x9A: wc = 0x01EE1; break; // ỡ
+            case 0x9B: wc = 0x01EDB; break; // ớ
+            case 0x9C: wc = 0x01EE3; break; // ợ
+            case 0x9D: wc = 0x01EE5; break; // ụ
+            case 0x9E: wc = 0x01EE7; break; // ủ
+            case 0x9F: wc = 0x01EEF; break; // ữ
+            case 0xA0: wc = 0x01EEB; break; // ứ
+            case 0xA1: wc = L'a';    break;
+            case 0xA2: wc = 0x00E2;  break; // â
+            case 0xA3: wc = 0x01EA5; break; // ấ
+            case 0xA4: wc = 0x01EA7; break; // ầ
+            case 0xA5: wc = 0x01EA9; break; // ẩ
+            case 0xA6: wc = 0x01EAB; break; // ẫ
+            case 0xA7: wc = 0x01EAD; break; // ậ
+            case 0xA8: wc = L'e';    break;
+            case 0xA9: wc = 0x00EA;  break; // ê
+            case 0xAA: wc = L'i';    break;
+            case 0xAB: wc = L'o';    break;
+            case 0xAC: wc = 0x00F4;  break; // ô
+            case 0xAD: wc = 0x01ED5; break; // ố
+            case 0xAE: wc = L'u';    break;
+            case 0xAF: wc = 0x01B0;  break; // ư
+            case 0xB0: wc = 0x01EED; break; // ừ
+            case 0xB1: wc = 0x01EEF; break; // ử
+            case 0xB2: wc = 0x01EF1; break; // ữ
+            case 0xB3: wc = 0x01EF3; break; // ự
+            case 0xB4: wc = L'y';    break;
+            case 0xB5: wc = 0x01EF3; break; // ỳ
+            case 0xB6: wc = 0x01EF7; break; // ỷ
+            case 0xB7: wc = 0x01EF9; break; // ỹ
+            case 0xB8: wc = 0x01EF5; break; // ỵ
+            case 0xB9: wc = 0x0119;  break; // đ
+            case 0xBB: wc = 0x0102;  break; // Ă
+            case 0xBC: wc = 0x00C2;  break; // Â
+            case 0xBD: wc = 0x00CA;  break; // Ê
+            case 0xBE: wc = 0x00D4;  break; // Ô
+            case 0xC6: wc = 0x01A0;  break; // Ơ
+            case 0xDD: wc = 0x01AF;  break; // Ư
+            case 0xE1: wc = 0x0118;  break; // Đ
+            default:   wc = static_cast<wchar_t>(c); break;
+        }
+        result.push_back(wc);
+    }
+    return result;
+}
+
 inline std::wstring Utf8ToWide(const std::string& text) {
     if (text.empty()) return {};
 
+    // 1. Try UTF-8 conversion
     int length = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(),
         static_cast<int>(text.size()), nullptr, 0);
-    UINT codePage = CP_UTF8;
-    DWORD flags = MB_ERR_INVALID_CHARS;
-    if (length <= 0) {
-        codePage = CP_ACP;
-        flags = 0;
-        length = MultiByteToWideChar(codePage, flags, text.data(),
-            static_cast<int>(text.size()), nullptr, 0);
+    if (length > 0) {
+        std::wstring result(static_cast<size_t>(length), L'\0');
+        if (MultiByteToWideChar(CP_UTF8, 0, text.data(), static_cast<int>(text.size()),
+            result.data(), length) > 0) {
+            std::wstring composed(result.size(), L'\0');
+            int compLen = FoldStringW(MAP_PRECOMPOSED, result.data(), static_cast<int>(result.size()),
+                composed.data(), static_cast<int>(composed.size()));
+            if (compLen > 0) {
+                composed.resize(compLen);
+                return composed;
+            }
+            return result;
+        }
     }
-    if (length <= 0) return {};
+
+    // 2. Try Windows-1258 (Vietnamese Windows Code Page)
+    length = MultiByteToWideChar(1258, 0, text.data(), static_cast<int>(text.size()), nullptr, 0);
+    if (length > 0) {
+        std::wstring result(static_cast<size_t>(length), L'\0');
+        if (MultiByteToWideChar(1258, 0, text.data(), static_cast<int>(text.size()),
+            result.data(), length) > 0) {
+            std::wstring composed(result.size(), L'\0');
+            int compLen = FoldStringW(MAP_PRECOMPOSED, result.data(), static_cast<int>(result.size()),
+                composed.data(), static_cast<int>(composed.size()));
+            if (compLen > 0) {
+                composed.resize(compLen);
+                return composed;
+            }
+            return result;
+        }
+    }
+
+    // 3. Check for TCVN3 character byte range (0x80..0xBF)
+    bool hasTcvn3 = std::any_of(text.begin(), text.end(), [](char c) {
+        unsigned char uc = static_cast<unsigned char>(c);
+        return uc >= 0x80 && uc <= 0xBF;
+    });
+    if (hasTcvn3) {
+        return ConvertTCVN3ToWide(text);
+    }
+
+    // 4. Fallback: System Code Page (CP_ACP)
+    length = MultiByteToWideChar(CP_ACP, 0, text.data(), static_cast<int>(text.size()), nullptr, 0);
+    if (length <= 0) return std::wstring(text.begin(), text.end());
 
     std::wstring result(static_cast<size_t>(length), L'\0');
-    MultiByteToWideChar(codePage, flags, text.data(), static_cast<int>(text.size()),
+    MultiByteToWideChar(CP_ACP, 0, text.data(), static_cast<int>(text.size()),
         result.data(), length);
     return result;
 }
@@ -278,6 +393,100 @@ inline SIZE MeasureTextW(ID3DXFont* font, const wchar_t* text) {
     size.cx = rect.right - rect.left;
     size.cy = rect.bottom - rect.top;
     return size;
+}
+
+inline std::wstring FoldStringW(const std::wstring& input) {
+    if (input.empty()) return {};
+    std::wstring composed(input.size(), L'\0');
+    int compLen = ::FoldStringW(MAP_PRECOMPOSED, input.data(), static_cast<int>(input.size()),
+        composed.data(), static_cast<int>(composed.size()));
+    if (compLen > 0) {
+        composed.resize(compLen);
+        return composed;
+    }
+    return input;
+}
+
+inline std::string WideToUtf8(const std::wstring& text) {
+    if (text.empty()) return {};
+    int length = WideCharToMultiByte(CP_UTF8, 0, text.data(), static_cast<int>(text.size()),
+        nullptr, 0, nullptr, nullptr);
+    if (length <= 0) return {};
+    std::string result(static_cast<size_t>(length), '\0');
+    WideCharToMultiByte(CP_UTF8, 0, text.data(), static_cast<int>(text.size()),
+        result.data(), length, nullptr, nullptr);
+    return result;
+}
+
+inline std::string WideToTCVN3(const std::wstring& text) {
+    std::string result;
+    result.reserve(text.size());
+    for (wchar_t wc : text) {
+        char c = 0;
+        switch (wc) {
+            case 0x00E0: c = (char)0x80; break; // à
+            case 0x01EA3: c = (char)0x81; break; // ả
+            case 0x00E3: c = (char)0x82; break; // ã
+            case 0x00E1: c = (char)0x83; break; // á
+            case 0x01EA1: c = (char)0x84; break; // ạ
+            case 0x0103: c = (char)0x85; break; // ă
+            case 0x01EB1: c = (char)0x86; break; // ằ
+            case 0x01EB3: c = (char)0x87; break; // ẳ
+            case 0x01EB5: c = (char)0x88; break; // ẵ
+            case 0x01EB9: c = (char)0x89; break; // ắ
+            case 0x01EB7: c = (char)0x8A; break; // ặ
+            case 0x01EC1: c = (char)0x8B; break; // ề
+            case 0x01EC3: c = (char)0x8C; break; // ể
+            case 0x01EC5: c = (char)0x8D; break; // ễ
+            case 0x01EBF: c = (char)0x8E; break; // ế
+            case 0x01EC7: c = (char)0x8F; break; // ệ
+            case 0x01EC9: c = (char)0x90; break; // ỉ
+            case 0x01ECB: c = (char)0x91; break; // ị
+            case 0x01ECD: c = (char)0x92; break; // ọ
+            case 0x01ECF: c = (char)0x93; break; // ỏ
+            case 0x01ED7: c = (char)0x94; break; // ỗ
+            case 0x01ED5: c = (char)0x95; break; // ố
+            case 0x01ED9: c = (char)0x96; break; // ộ
+            case 0x01A1:  c = (char)0x97; break; // ơ
+            case 0x01EDD: c = (char)0x98; break; // ờ
+            case 0x01EDF: c = (char)0x99; break; // ở
+            case 0x01EE1: c = (char)0x9A; break; // ỡ
+            case 0x01EDB: c = (char)0x9B; break; // ớ
+            case 0x01EE3: c = (char)0x9C; break; // ợ
+            case 0x01EE5: c = (char)0x9D; break; // ụ
+            case 0x01EE7: c = (char)0x9E; break; // ủ
+            case 0x00E2:  c = (char)0xA2; break; // â
+            case 0x01EA5: c = (char)0xA3; break; // ấ
+            case 0x01EA7: c = (char)0xA4; break; // ầ
+            case 0x01EA9: c = (char)0xA5; break; // ẩ
+            case 0x01EAB: c = (char)0xA6; break; // ẫ
+            case 0x01EAD: c = (char)0xA7; break; // ậ
+            case 0x00EA:  c = (char)0xA9; break; // ê
+            case 0x00F4:  c = (char)0xAC; break; // ô
+            case 0x01B0:  c = (char)0xAF; break; // ư
+            case 0x01EED: c = (char)0xB0; break; // ừ
+            case 0x01EEF: c = (char)0xB1; break; // ử
+            case 0x01EF1: c = (char)0xB2; break; // ữ
+            case 0x01EF3: c = (char)0xB3; break; // ự
+            case 0x01EF7: c = (char)0xB6; break; // ỷ
+            case 0x01EF9: c = (char)0xB7; break; // ỹ
+            case 0x01EF5: c = (char)0xB8; break; // ỵ
+            case 0x0119:  c = (char)0xB9; break; // đ
+            case 0x0102:  c = (char)0xBB; break; // Ă
+            case 0x00C2:  c = (char)0xBC; break; // Â
+            case 0x00CA:  c = (char)0xBD; break; // Ê
+            case 0x00D4:  c = (char)0xBE; break; // Ô
+            case 0x01A0:  c = (char)0xC6; break; // Ơ
+            case 0x01AF:  c = (char)0xDD; break; // Ư
+            case 0x0118:  c = (char)0xE1; break; // Đ
+            default:
+                if (wc <= 255) c = static_cast<char>(wc);
+                else c = '?';
+                break;
+        }
+        result.push_back(c);
+    }
+    return result;
 }
 
 } // namespace D3DHelper

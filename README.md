@@ -4,22 +4,32 @@ Client-side ASI plugin cho SA-MP 0.3.DL / open.mp, viết bằng C++/Win32.
 
 ## Trạng thái hiện tại
 
-Phần Custom D3D9 Nametag Engine, Role badge, RakNet role protocol và open.mp server role component đã được gỡ khỏi repository.
+Client hiện gồm:
 
-Code còn lại chỉ giữ ASI entrypoint tối giản:
+- Custom D3D9 Nametag Engine và role badge.
+- RakNet role protocol kết nối với open.mp server component.
+- Custom Chat cho SA-MP 0.3.DL R1 với native fallback.
+- Chat capture tại điểm hội tụ `CChat::AddEntry` và custom network packet, gửi qua original `CInput::Send`.
+- Composer UTF-16, Windows IME, clipboard Unicode, selection, history và smooth scroll.
+- Direct3D9 lost/reset lifecycle và runtime config tại `HUB-Core/chat.ini`.
 
-- Khởi tạo log `HUB-Core.log`.
-- Chờ SA-MP chat sẵn sàng.
-- In thông báo version `[HUB-Core] HUBCore.asi Version: ...`.
-
-## Cấu trúc còn lại
+## Cấu trúc chính
 
 ```text
 HUB-Core/
+├── CustomChat.cpp
+├── CustomChatInput.cpp
+├── ChatManager.cpp
+├── ChatSettings.cpp
+├── HookManager.cpp
+├── D3DHook.cpp
+├── Nametag.cpp
+├── Network.cpp
 ├── dllmain.cpp
 ├── framework.h
 ├── pch.cpp
 ├── pch.h
+├── chat.ini
 └── HUB-Core.vcxproj
 ```
 
@@ -42,3 +52,5 @@ Hoặc dùng MSBuild:
 ```cmd
 MSBuild.exe HUB-Core\HUB-Core.vcxproj /p:Configuration=Release /p:Platform=Win32
 ```
+
+Custom Chat chỉ cài internal hooks khi phát hiện SA-MP 0.3.DL R1. Nếu hook hoặc D3D resource không sẵn sàng, native chat tiếp tục render.

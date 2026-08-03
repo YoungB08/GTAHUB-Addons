@@ -1,180 +1,169 @@
 #include "pch.h"
 #include "HookManager.h"
+
 #include "ChatManager.h"
+#include "CustomChat.h"
+#include "CustomChatInput.h"
 #include "Logger.h"
 #include "vendor/MinHook/MinHook.h"
+
 #include <sampapi/0.3.DL-1/CChat.h>
 #include <sampapi/0.3.DL-1/CInput.h>
+#include <sampapi/0.3.DL-1/CLocalPlayer.h>
+#include <sampapi/0.3.DL-1/CNetGame.h>
+#include <sampapi/0.3.DL-1/CPlayerPool.h>
+
+#include <atomic>
+#include <algorithm>
+#include <array>
+#include <cstring>
+#include <string>
+#include <vector>
 
 using namespace sampapi::v03dl;
 
 namespace {
 
-using tRenderEntry    = void(__thiscall*)(CChat*, const char*, sampapi::CRect, D3DCOLOR);
-using tAddChatMessage = void(__thiscall*)(CChat*, const char*, D3DCOLOR, const char*);
-using tAddMessage     = void(__thiscall*)(CChat*, D3DCOLOR, const char*);
+using OpenFn = void(__thiscall*)(CInput*);
+using CloseFn = void(__thiscall*)(CInput*);
 
-using tSend           = void(__thiscall*)(CInput*, const char*);
-using tProcessInput   = void(__thiscall*)(CInput*);
-using tOpen           = void(__thiscall*)(CInput*);
-using tClose          = void(__thiscall*)(CInput*);
+struct SampEntrySnapshot {
+    int timestamp = 0;
+    int type = 0;
+    std::string prefix;
+    std::string text;
+    D3DCOLOR textColor = 0;
+    D3DCOLOR prefixColor = 0;
+};
 
-tRenderEntry    oRenderEntry    = nullptr;
-tAddChatMessage oAddChatMessage = nullptr;
-tAddMessage     oAddMessage     = nullptr;
+OpenFn g_OriginalOpen = nullptr;
+CloseFn g_OriginalClose = nullptr;
+std::atomic<bool> g_Installed{false};
+std::atomic<bool> g_RenderHookCreated{false};
+std::atomic<bool> g_NativeChatSuppressed{false};
+std::atomic<bool> g_NativeInputOpen{false};
+CChat* g_SyncedChat = nullptr;
+std::vector<SampEntrySnapshot> g_PreviousSampEntries;
 
-tSend           oSend           = nullptr;
-tProcessInput   oProcessInput   = nullptr;
-tOpen           oOpen           = nullptr;
-tClose          oClose          = nullptr;
+void __fastcall HookedRender(CChat*, void*);
 
 uintptr_t GetSampAddress(uintptr_t offset) {
-    static uintptr_t sampBase = reinterpret_cast<uintptr_t>(GetModuleHandleA("samp.dll"));
-    return sampBase ? (sampBase + offset) : 0;
+    const HMODULE module = GetModuleHandleA("samp.dll");
+    return module ? reinterpret_cast<uintptr_t>(module) + offset : 0;
 }
 
-// Hook functions using __fastcall for x86 detour (pThis in ECX, edx in EDX)
-void __fastcall Hooked_RenderEntry(CChat* pThis, void* edx, const char* szText, sampapi::CRect rect, D3DCOLOR color) {
-    (void)edx;
-    if (!pThis) return;
-
-    if (oRenderEntry) {
-        try {
-            oRenderEntry(pThis, szText, rect, color);
-        } catch (const std::exception& e) {
-            Logger::Error("[EXCEPTION] oRenderEntry: %s", e.what());
-        } catch (...) {
-            Logger::Error("[EXCEPTION] oRenderEntry: Unknown SEH/C++ exception");
-        }
+bool IsExecutableAddress(uintptr_t address) {
+    if (address < 0x10000) return false;
+    MEMORY_BASIC_INFORMATION information{};
+    if (VirtualQuery(reinterpret_cast<const void*>(address), &information, sizeof(information)) != sizeof(information) ||
+        information.State != MEM_COMMIT || (information.Protect & (PAGE_GUARD | PAGE_NOACCESS)) != 0) {
+        return false;
     }
+    constexpr DWORD executable = PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
+    return (information.Protect & executable) != 0;
 }
 
-void __fastcall Hooked_AddChatMessage(CChat* pThis, void* edx, const char* szPrefix, D3DCOLOR prefixColor, const char* szText) {
-    (void)edx;
-    if (!pThis) return;
-    Logger::Chat("[HOOK] AddChatMessage called: [%s] %s", szPrefix ? szPrefix : "", szText ? szText : "");
-    try {
-        ChatManager::Get().OnServerMessage(szPrefix, prefixColor, szText);
-    } catch (const std::exception& e) {
-        Logger::Error("[EXCEPTION] ChatManager::OnServerMessage: %s", e.what());
-    } catch (...) {
-        Logger::Error("[EXCEPTION] ChatManager::OnServerMessage: Unknown SEH/C++ exception");
-    }
-
-    if (oAddChatMessage) {
-        try {
-            oAddChatMessage(pThis, szPrefix, prefixColor, szText);
-        } catch (const std::exception& e) {
-            Logger::Error("[EXCEPTION] oAddChatMessage: %s", e.what());
-        } catch (...) {
-            Logger::Error("[EXCEPTION] oAddChatMessage: Unknown SEH/C++ exception");
-        }
-    }
+bool IsSupportedSampVersion() {
+    const HMODULE module = GetModuleHandleA("samp.dll");
+    if (!module) return false;
+    const auto base = reinterpret_cast<uintptr_t>(module);
+    const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE) return false;
+    const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(base + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE) return false;
+    const DWORD imageSize = nt->OptionalHeader.SizeOfImage;
+    return imageSize >= 0x2A0000;
 }
 
-void __fastcall Hooked_AddMessage(CChat* pThis, void* edx, D3DCOLOR color, const char* szText) {
-    (void)edx;
-    if (!pThis) return;
-    Logger::Chat("[HOOK] AddMessage called: %s", szText ? szText : "");
-    try {
-        ChatManager::Get().OnClientMessage(color, szText);
-    } catch (const std::exception& e) {
-        Logger::Error("[EXCEPTION] ChatManager::OnClientMessage: %s", e.what());
-    } catch (...) {
-        Logger::Error("[EXCEPTION] ChatManager::OnClientMessage: Unknown SEH/C++ exception");
+bool CreateAndEnable(uintptr_t offset, void* detour, void** original, const char* name) {
+    const uintptr_t address = GetSampAddress(offset);
+    if (!IsExecutableAddress(address)) {
+        Logger::Error("Hook target %s is not executable. offset=0x%X", name, static_cast<unsigned>(offset));
+        return false;
     }
 
-    if (oAddMessage) {
-        try {
-            oAddMessage(pThis, color, szText);
-        } catch (const std::exception& e) {
-            Logger::Error("[EXCEPTION] oAddMessage: %s", e.what());
-        } catch (...) {
-            Logger::Error("[EXCEPTION] oAddMessage: Unknown SEH/C++ exception");
-        }
+    MH_STATUS status = MH_CreateHook(reinterpret_cast<void*>(address), detour, original);
+    if (status != MH_OK) {
+        Logger::Error("MH_CreateHook %s failed: %s", name, MH_StatusToString(status));
+        return false;
     }
+    status = MH_EnableHook(reinterpret_cast<void*>(address));
+    if (status != MH_OK) {
+        Logger::Error("MH_EnableHook %s failed: %s", name, MH_StatusToString(status));
+        return false;
+    }
+    Logger::Hook("Enabled %s at samp.dll+0x%X", name, static_cast<unsigned>(offset));
+    return true;
 }
 
-void __fastcall Hooked_Send(CInput* pThis, void* edx, const char* szString) {
-    (void)edx;
-    if (!pThis) return;
-    Logger::Input("[HOOK] CInput::Send called: %s", szString ? szString : "");
-    try {
-        ChatManager::Get().OnPlayerSend(szString);
-    } catch (const std::exception& e) {
-        Logger::Error("[EXCEPTION] ChatManager::OnPlayerSend: %s", e.what());
-    } catch (...) {
-        Logger::Error("[EXCEPTION] ChatManager::OnPlayerSend: Unknown SEH/C++ exception");
+bool CreateRenderHook() {
+    const uintptr_t address = GetSampAddress(Offsets::CChat_Render);
+    if (!IsExecutableAddress(address)) {
+        Logger::Error("Hook target CChat::Render is not executable. offset=0x%X",
+            static_cast<unsigned>(Offsets::CChat_Render));
+        return false;
     }
 
-    if (oSend) {
-        try {
-            oSend(pThis, szString);
-        } catch (const std::exception& e) {
-            Logger::Error("[EXCEPTION] oSend: %s", e.what());
-        } catch (...) {
-            Logger::Error("[EXCEPTION] oSend: Unknown SEH/C++ exception");
-        }
+    const MH_STATUS status = MH_CreateHook(reinterpret_cast<void*>(address),
+        reinterpret_cast<void*>(&HookedRender), nullptr);
+    if (status != MH_OK) {
+        Logger::Error("MH_CreateHook CChat::Render failed: %s", MH_StatusToString(status));
+        return false;
     }
+    g_RenderHookCreated.store(true, std::memory_order_release);
+    Logger::Hook("Prepared CChat::Render suppression at samp.dll+0x%X",
+        static_cast<unsigned>(Offsets::CChat_Render));
+    return true;
 }
 
-void __fastcall Hooked_ProcessInput(CInput* pThis, void* edx) {
-    (void)edx;
-    if (!pThis) return;
-    if (oProcessInput) {
-        try {
-            oProcessInput(pThis);
-        } catch (const std::exception& e) {
-            Logger::Error("[EXCEPTION] oProcessInput: %s", e.what());
-        } catch (...) {
-            Logger::Error("[EXCEPTION] oProcessInput: Unknown SEH/C++ exception");
-        }
-    }
+void __fastcall HookedRender(CChat*, void*) {
 }
 
-void __fastcall Hooked_Open(CInput* pThis, void* edx) {
-    (void)edx;
-    if (!pThis) return;
-    Logger::Input("[HOOK] CInput::Open called.");
-    try {
-        ChatManager::Get().OpenInput();
-    } catch (const std::exception& e) {
-        Logger::Error("[EXCEPTION] ChatManager::OpenInput: %s", e.what());
-    } catch (...) {
-        Logger::Error("[EXCEPTION] ChatManager::OpenInput: Unknown SEH/C++ exception");
-    }
+bool SameEntry(const SampEntrySnapshot& left, const SampEntrySnapshot& right) {
+    return left.timestamp == right.timestamp && left.type == right.type &&
+        left.prefix == right.prefix && left.text == right.text &&
+        left.textColor == right.textColor && left.prefixColor == right.prefixColor;
+}
 
-    if (oOpen) {
-        try {
-            oOpen(pThis);
-        } catch (const std::exception& e) {
-            Logger::Error("[EXCEPTION] oOpen: %s", e.what());
-        } catch (...) {
-            Logger::Error("[EXCEPTION] oOpen: Unknown SEH/C++ exception");
-        }
+template <size_t Size>
+std::string BoundedString(const char (&text)[Size]) {
+    size_t length = 0;
+    while (length < Size && text[length] != '\0') ++length;
+    return std::string(text, length);
+}
+
+bool CopySampEntries(CChat* chat, CChat::ChatEntry* entries) {
+    if (!chat || !entries) return false;
+#if defined(_MSC_VER)
+    __try {
+        std::memcpy(entries, chat->m_entry, sizeof(chat->m_entry));
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+#else
+    std::memcpy(entries, chat->m_entry, sizeof(chat->m_entry));
+    return true;
+#endif
+}
+
+void __fastcall HookedOpen(CInput* input, void*) {
+    if (!input) return;
+    if (HUB::Chat::CustomChat::IsReady()) {
+        HUB::Chat::CustomChat::OpenInput();
+        return;
+    }
+    if (g_OriginalOpen) {
+        g_OriginalOpen(input);
+        g_NativeInputOpen.store(true, std::memory_order_release);
     }
 }
 
-void __fastcall Hooked_Close(CInput* pThis, void* edx) {
-    (void)edx;
-    if (!pThis) return;
-    Logger::Input("[HOOK] CInput::Close called.");
-    try {
-        ChatManager::Get().CloseInput();
-    } catch (const std::exception& e) {
-        Logger::Error("[EXCEPTION] ChatManager::CloseInput: %s", e.what());
-    } catch (...) {
-        Logger::Error("[EXCEPTION] ChatManager::CloseInput: Unknown SEH/C++ exception");
-    }
-
-    if (oClose) {
-        try {
-            oClose(pThis);
-        } catch (const std::exception& e) {
-            Logger::Error("[EXCEPTION] oClose: %s", e.what());
-        } catch (...) {
-            Logger::Error("[EXCEPTION] oClose: Unknown SEH/C++ exception");
-        }
+void __fastcall HookedClose(CInput* input, void*) {
+    if (!input) return;
+    HUB::Chat::CustomChat::CloseInput();
+    if (g_NativeInputOpen.exchange(false, std::memory_order_acq_rel) && g_OriginalClose) {
+        g_OriginalClose(input);
     }
 }
 
@@ -183,81 +172,179 @@ void __fastcall Hooked_Close(CInput* pThis, void* edx) {
 namespace HookManager {
 
 bool Install() {
-    if (MH_Initialize() != MH_OK) {
-        Logger::Error("Failed to initialize MinHook.");
+    if (g_Installed.load(std::memory_order_acquire)) return true;
+    if (!IsSupportedSampVersion()) {
+        Logger::Error("Custom Chat only supports SA-MP 0.3.DL R1; hooks were not installed.");
         return false;
     }
-    Logger::Hook("MinHook initialized successfully.");
-
-    bool success = true;
-    success &= InstallChatHooks();
-    success &= InstallInputHooks();
-    success &= InstallD3DHooks();
-
-    if (success) {
-        Logger::Hook("All hooks installed and enabled successfully.");
-    } else {
-        Logger::Error("One or more hooks failed to install.");
+    const MH_STATUS initializeStatus = MH_Initialize();
+    if (initializeStatus != MH_OK && initializeStatus != MH_ERROR_ALREADY_INITIALIZED) {
+        Logger::Error("Failed to initialize MinHook: %s", MH_StatusToString(initializeStatus));
+        return false;
     }
 
-    return success;
+    if (!InstallChatHooks() || !InstallInputHooks() || !InstallD3DHooks()) {
+        Logger::Error("Custom Chat hook installation failed; rolling back to native chat.");
+        Uninstall();
+        return false;
+    }
+    g_Installed.store(true, std::memory_order_release);
+    Logger::Hook("Custom Chat hooks installed successfully.");
+    return true;
 }
 
 bool InstallChatHooks() {
-    Logger::Hook("RakNet packet interception active. Skipping internal CChat hooks for maximum stability.");
-    return true;
+    return CreateRenderHook();
 }
 
 bool InstallInputHooks() {
-    uintptr_t pSend         = GetSampAddress(Offsets::CInput_Send);
-    uintptr_t pProcessInput = GetSampAddress(Offsets::CInput_ProcessInput);
-    uintptr_t pOpen         = GetSampAddress(Offsets::CInput_Open);
-    uintptr_t pClose        = GetSampAddress(Offsets::CInput_Close);
-
-    if (!pSend || !pProcessInput || !pOpen || !pClose) {
-        Logger::Error("Failed to locate samp.dll input addresses.");
-        return false;
-    }
-
-    MH_STATUS status = MH_OK;
-    status = MH_CreateHook(reinterpret_cast<void*>(pSend), reinterpret_cast<void*>(&Hooked_Send), reinterpret_cast<void**>(&oSend));
-    Logger::Hook("CreateHook CInput::Send (0x%X) -> trampoline=%p: %s", Offsets::CInput_Send, oSend, MH_StatusToString(status));
-
-    status = MH_CreateHook(reinterpret_cast<void*>(pProcessInput), reinterpret_cast<void*>(&Hooked_ProcessInput), reinterpret_cast<void**>(&oProcessInput));
-    Logger::Hook("CreateHook CInput::ProcessInput (0x%X) -> trampoline=%p: %s", Offsets::CInput_ProcessInput, oProcessInput, MH_StatusToString(status));
-
-    status = MH_CreateHook(reinterpret_cast<void*>(pOpen), reinterpret_cast<void*>(&Hooked_Open), reinterpret_cast<void**>(&oOpen));
-    Logger::Hook("CreateHook CInput::Open (0x%X) -> trampoline=%p: %s", Offsets::CInput_Open, oOpen, MH_StatusToString(status));
-
-    status = MH_CreateHook(reinterpret_cast<void*>(pClose), reinterpret_cast<void*>(&Hooked_Close), reinterpret_cast<void**>(&oClose));
-    Logger::Hook("CreateHook CInput::Close (0x%X) -> trampoline=%p: %s", Offsets::CInput_Close, oClose, MH_StatusToString(status));
-
-    // Enable input hooks one by one for step-by-step verification
-    // status = MH_EnableHook(reinterpret_cast<void*>(pSend));
-    // Logger::Hook("Enable CInput::Send (0x%X): %s", Offsets::CInput_Send, MH_StatusToString(status));
-
-    // status = MH_EnableHook(reinterpret_cast<void*>(pProcessInput));
-    // Logger::Hook("Enable CInput::ProcessInput (0x%X): %s", Offsets::CInput_ProcessInput, MH_StatusToString(status));
-
-    // status = MH_EnableHook(reinterpret_cast<void*>(pOpen));
-    // Logger::Hook("Enable CInput::Open (0x%X): %s", Offsets::CInput_Open, MH_StatusToString(status));
-
-    // status = MH_EnableHook(reinterpret_cast<void*>(pClose));
-    // Logger::Hook("Enable CInput::Close (0x%X): %s", Offsets::CInput_Close, MH_StatusToString(status));
-
-    Logger::Hook("CInput hooks created successfully. EnableHook step testing mode active.");
-    return true;
+    return CreateAndEnable(Offsets::CInput_Open,
+               reinterpret_cast<void*>(&HookedOpen),
+               reinterpret_cast<void**>(&g_OriginalOpen), "CInput::Open") &&
+        CreateAndEnable(Offsets::CInput_Close,
+               reinterpret_cast<void*>(&HookedClose),
+               reinterpret_cast<void**>(&g_OriginalClose), "CInput::Close");
 }
 
 bool InstallD3DHooks() {
-    Logger::D3DLog("InstallD3DHooks pipeline ready.");
     return true;
 }
 
+bool IsInstalled() {
+    return g_Installed.load(std::memory_order_acquire);
+}
+
+bool SendChatText(const char* text) {
+    CInput* input = GetRefInput();
+    if (!input || !text || text[0] == '\0') return false;
+    try {
+        HUB::Chat::ChatManager::Get().OnPlayerSend(text);
+
+        if (text[0] != '/') {
+            if (input->m_pDefaultCommand) {
+                input->m_pDefaultCommand(text);
+                return true;
+            }
+
+            CNetGame* netGame = GetRefNetGame();
+            CPlayerPool* playerPool = netGame ? netGame->GetPlayerPool() : nullptr;
+            CLocalPlayer* localPlayer = playerPool ? playerPool->GetLocalPlayer() : nullptr;
+            if (!localPlayer) return false;
+            localPlayer->Chat(text);
+            return true;
+        }
+
+        std::string commandLine(text + 1);
+        const size_t separator = commandLine.find(' ');
+        const std::string command = commandLine.substr(0, separator);
+        const auto handler = input->GetCommandHandler(command.c_str());
+        if (handler) {
+            const char* arguments = separator == std::string::npos
+                ? ""
+                : commandLine.c_str() + separator + 1;
+            handler(arguments);
+        } else {
+            input->Send(text);
+        }
+        return true;
+    } catch (const std::exception& exception) {
+        Logger::Error("Failed to dispatch chat input: %s", exception.what());
+    } catch (...) {
+        Logger::Error("Failed to dispatch chat input with unknown exception.");
+    }
+    return false;
+}
+
+void CloseChatInput() {
+    CInput* input = GetRefInput();
+    HUB::Chat::CustomChat::CloseInput();
+    if (input && g_NativeInputOpen.exchange(false, std::memory_order_acq_rel) && g_OriginalClose) {
+        g_OriginalClose(input);
+    }
+}
+
+bool SetNativeChatSuppressed(bool suppressed) {
+    if (!g_RenderHookCreated.load(std::memory_order_acquire)) return !suppressed;
+    if (g_NativeChatSuppressed.load(std::memory_order_acquire) == suppressed) return true;
+
+    const uintptr_t address = GetSampAddress(Offsets::CChat_Render);
+    if (!address) return false;
+    const MH_STATUS status = suppressed
+        ? MH_EnableHook(reinterpret_cast<void*>(address))
+        : MH_DisableHook(reinterpret_cast<void*>(address));
+    if (status != MH_OK) {
+        Logger::Error("Failed to %s native chat suppression: %s",
+            suppressed ? "enable" : "disable", MH_StatusToString(status));
+        return false;
+    }
+
+    g_NativeChatSuppressed.store(suppressed, std::memory_order_release);
+    Logger::Hook("Native chat suppression %s.", suppressed ? "enabled" : "disabled");
+    return true;
+}
+
+void SyncSampChat() {
+    CChat* chat = GetRefChat();
+    if (!chat) {
+        g_SyncedChat = nullptr;
+        g_PreviousSampEntries.clear();
+        return;
+    }
+
+    std::array<CChat::ChatEntry, CChat::MAX_MESSAGES> rawEntries{};
+    if (!CopySampEntries(chat, rawEntries.data())) {
+        Logger::Error("Failed to read the native SA-MP chat history.");
+        return;
+    }
+
+    std::vector<SampEntrySnapshot> currentEntries;
+    currentEntries.reserve(rawEntries.size());
+    for (const CChat::ChatEntry& entry : rawEntries) {
+        SampEntrySnapshot snapshot;
+        snapshot.timestamp = entry.m_timestamp;
+        snapshot.type = entry.m_nType;
+        snapshot.prefix = BoundedString(entry.m_szPrefix);
+        snapshot.text = BoundedString(entry.m_szText);
+        snapshot.textColor = entry.m_textColor;
+        snapshot.prefixColor = entry.m_prefixColor;
+        if (snapshot.type == CChat::ENTRY_TYPE_NONE && snapshot.prefix.empty() && snapshot.text.empty()) continue;
+        currentEntries.push_back(std::move(snapshot));
+    }
+
+    if (g_SyncedChat != chat) {
+        g_SyncedChat = chat;
+        g_PreviousSampEntries.clear();
+    }
+
+    size_t overlap = (std::min)(g_PreviousSampEntries.size(), currentEntries.size());
+    while (overlap > 0 && !std::equal(
+        g_PreviousSampEntries.end() - static_cast<std::ptrdiff_t>(overlap),
+        g_PreviousSampEntries.end(), currentEntries.begin(), SameEntry)) {
+        --overlap;
+    }
+
+    for (size_t index = overlap; index < currentEntries.size(); ++index) {
+        const SampEntrySnapshot& entry = currentEntries[index];
+        HUB::Chat::ChatManager::Get().OnSampEntry(entry.type, entry.text.c_str(), entry.prefix.c_str(),
+            entry.textColor, entry.prefixColor);
+    }
+    g_PreviousSampEntries = std::move(currentEntries);
+}
+
 void Uninstall() {
+    g_Installed.store(false, std::memory_order_release);
+    HUB::Chat::CustomChat::CloseInput();
+    SetNativeChatSuppressed(false);
     MH_DisableHook(MH_ALL_HOOKS);
     MH_Uninitialize();
-    Logger::Hook("All hooks disabled and MinHook uninitialized.");
+    g_RenderHookCreated.store(false, std::memory_order_release);
+    g_NativeChatSuppressed.store(false, std::memory_order_release);
+    g_SyncedChat = nullptr;
+    g_PreviousSampEntries.clear();
+    g_OriginalOpen = nullptr;
+    g_OriginalClose = nullptr;
+    g_NativeInputOpen.store(false, std::memory_order_release);
+    Logger::Hook("Custom Chat hooks uninstalled.");
 }
 
 } // namespace HookManager

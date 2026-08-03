@@ -37,9 +37,6 @@ constexpr uint8_t kPktChatClear     = 232;
 /// Hook RakClientInterface::Receive().
 void Init();
 
-/// Gửi packet 221 để server resync toàn bộ nametag data.
-void RequestData();
-
 /// Gỡ hook. Gọi khi DLL unload.
 void Shutdown();
 

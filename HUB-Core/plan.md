@@ -1,6 +1,6 @@
 # KẾ HOẠCH TRIỂN KHAI CUSTOM CHAT
 
-**Trạng thái:** CHỜ DUYỆT - KHÔNG TRIỂN KHAI CODE TRƯỚC KHI ĐƯỢC DUYỆT  
+**Trạng thái:** MVP ĐÃ TRIỂN KHAI - CHỜ KIỂM THỬ IN-GAME
 **Branch:** `feature/custom-chat-system`  
 **Tài liệu nguồn:** Phần SRS bên dưới được giữ nguyên để đối chiếu yêu cầu.
 

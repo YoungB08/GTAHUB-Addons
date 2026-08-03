@@ -13,7 +13,7 @@
 #define HUB_CORE_VERSION_PATCH 0
 #define HUB_CORE_VERSION_STRING "1.1.0"
 
-namespace sampapi { namespace v03dl { class CNetGame; class CChat; class CInput; class CPlayerTags; } }
+namespace sampapi { namespace v03dl { class CNetGame; class CChat; class CInput; class CPlayerTags; class CGame; } }
 
 inline sampapi::v03dl::CNetGame* GetRefNetGame() {
     HMODULE hSamp = GetModuleHandleA("samp.dll");
@@ -76,6 +76,14 @@ inline sampapi::v03dl::CInput* GetRefInput() {
 
     auto ppInput = reinterpret_cast<sampapi::v03dl::CInput**>(base + offset);
     return (ppInput) ? *ppInput : nullptr;
+}
+
+inline sampapi::v03dl::CGame* GetRefGame() {
+    HMODULE hSamp = GetModuleHandleA("samp.dll");
+    if (!hSamp) return nullptr;
+    const auto base = reinterpret_cast<uintptr_t>(hSamp);
+    auto ppGame = reinterpret_cast<sampapi::v03dl::CGame**>(base + 0x2ACA3C);
+    return ppGame ? *ppGame : nullptr;
 }
 
 inline sampapi::v03dl::CPlayerTags*& GetRefPlayerTags() {

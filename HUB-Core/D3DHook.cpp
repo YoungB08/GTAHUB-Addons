@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "D3DHook.h"
+#include "CustomChat.h"
 #include "Nametag.h"
 
 #include <atomic>
@@ -57,10 +58,12 @@ HRESULT __stdcall HookedReset(IDirect3DDevice9* device, D3DPRESENT_PARAMETERS* p
         return D3DERR_INVALIDCALL;
     }
 
+    HUB::Chat::CustomChat::OnLostDevice();
     Nametag::OnLostDevice();
     const HRESULT result = g_OriginalReset(device, parameters);
     if (SUCCEEDED(result)) {
         Nametag::OnResetDevice(device);
+        HUB::Chat::CustomChat::OnResetDevice(device);
     }
     return result;
 }
@@ -82,6 +85,13 @@ HRESULT __stdcall HookedPresent(IDirect3DDevice9* device, const RECT* sourceRect
             Log("[EXCEPTION] Nametag::RenderAll: %s", e.what());
         } catch (...) {
             Log("[EXCEPTION] Nametag::RenderAll: Unknown Exception");
+        }
+        try {
+            HUB::Chat::CustomChat::Render(device);
+        } catch (const std::exception& e) {
+            Log("[EXCEPTION] CustomChat::Render: %s", e.what());
+        } catch (...) {
+            Log("[EXCEPTION] CustomChat::Render: Unknown Exception");
         }
         device->EndScene();
     }
@@ -159,6 +169,7 @@ void D3DHook::Uninstall() {
         }
     }
 
+    HUB::Chat::CustomChat::Shutdown();
     Nametag::Shutdown();
     g_Device = nullptr;
     g_OriginalReset = nullptr;

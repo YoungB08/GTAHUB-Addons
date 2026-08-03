@@ -128,7 +128,9 @@
       <AdditionalLibraryDirectories>$(SolutionDir)HUB-Core;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy /y /d "$(TargetPath)" "D:\GTA-Hub\GTA SAN ANDREAS\"</Command>
+      <Command>if not exist "D:\GTA-Hub\GTA SAN ANDREAS\HUB-Core" mkdir "D:\GTA-Hub\GTA SAN ANDREAS\HUB-Core"
+copy /y "$(TargetPath)" "D:\GTA-Hub\GTA SAN ANDREAS\HUB-Core.asi"
+copy /y "$(ProjectDir)chat.ini" "D:\GTA-Hub\GTA SAN ANDREAS\HUB-Core\chat.ini"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -174,9 +176,6 @@
       <AdditionalDependencies>$(CoreLibraryDependencies);%(AdditionalDependencies);Ws2_32.lib;sampapi.lib;</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(SolutionDir)HUB-Core;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
-    <PostBuildEvent>
-      <Command>xcopy /y /d "$(TargetPath)" "D:\GTA-Hub\GTA SAN ANDREAS\"</Command>
-    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
@@ -221,9 +220,16 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <None Include="chat.ini" />
+  </ItemGroup>
+  <ItemGroup>
     <ClInclude Include="framework.h" />
     <ClInclude Include="D3DHelper.h" />
     <ClInclude Include="ChatManager.h" />
+    <ClInclude Include="ChatSettings.h" />
+    <ClInclude Include="ChatTextRenderer.h" />
+    <ClInclude Include="CustomChat.h" />
+    <ClInclude Include="CustomChatInput.h" />
     <ClInclude Include="HookManager.h" />
     <ClInclude Include="Logger.h" />
     <ClInclude Include="D3DHook.h" />
@@ -242,6 +248,10 @@
   <ItemGroup>
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="ChatManager.cpp" />
+    <ClCompile Include="ChatSettings.cpp" />
+    <ClCompile Include="ChatTextRenderer.cpp" />
+    <ClCompile Include="CustomChat.cpp" />
+    <ClCompile Include="CustomChatInput.cpp" />
     <ClCompile Include="HookManager.cpp" />
     <ClCompile Include="Logger.cpp" />
     <ClCompile Include="D3DHook.cpp" />

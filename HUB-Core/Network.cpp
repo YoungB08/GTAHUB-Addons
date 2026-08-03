@@ -1,12 +1,14 @@
 #include "pch.h"
 #include "Network.h"
 
+#include "ChatManager.h"
 #include "PlayerData.h"
 #include "RoleConfig.h"
 
 #include <sampapi/0.3.DL-1/CNetGame.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cstdint>
 #include <cstring>
 #include <string>
@@ -31,18 +33,15 @@ struct RakPacket {
 
 using ReceiveFn = RakPacket*(__thiscall*)(void*);
 using DeallocatePacketFn = void(__thiscall*)(void*, RakPacket*);
-using SendRawFn = bool(__thiscall*)(void*, const char*, int, int, int, char);
 
-constexpr size_t kSendRawIndex = 6;
 constexpr size_t kReceiveIndex = 8;
 constexpr size_t kDeallocatePacketIndex = 9;
 
 ReceiveFn g_OriginalReceive = nullptr;
 DeallocatePacketFn g_DeallocatePacket = nullptr;
-SendRawFn g_SendRaw = nullptr;
 DWORD* g_RakVmt = nullptr;
 void* g_RakClient = nullptr;
-bool g_Ready = false;
+std::atomic<bool> g_Ready{false};
 
 bool IsReadable(const void* address, size_t size) {
     if (!address || reinterpret_cast<uintptr_t>(address) < 0x10000 || size == 0) return false;
@@ -253,6 +252,8 @@ void ParseChatMessage(const uint8_t* data, size_t length) {
     std::string text;
     if (reader.Read(packetId) && packetId == Network::kPktChatMessage && reader.Read(channelId) &&
         reader.Read(color) && reader.ReadString(text, 255)) {
+        const D3DCOLOR argbColor = (color << 24) | (color >> 8);
+        HUB::Chat::ChatManager::Get().OnClientMessage(argbColor, text.c_str());
         Log("Chat message packet: channel=%u color=%08X length=%u text=%s",
             channelId, color, static_cast<unsigned>(text.size()), text.c_str());
     }
@@ -297,7 +298,7 @@ RakPacket* __fastcall HookedReceive(void* rakClient, void*) {
 } // namespace
 
 void Network::Init() {
-    if (g_Ready) return;
+    if (g_Ready.load(std::memory_order_acquire)) return;
 
     CNetGame* netGame = GetRefNetGame();
     const SAMPVersionInfo version = SAMPVersionInfo::Get();
@@ -308,7 +309,7 @@ void Network::Init() {
 
     DWORD** vmtPointer = reinterpret_cast<DWORD**>(rakClient);
     if (!IsReadable(vmtPointer, sizeof(*vmtPointer)) ||
-        !IsReadable(*vmtPointer, sizeof(DWORD) * (kSendRawIndex + 1))) {
+        !IsReadable(*vmtPointer, sizeof(DWORD) * (kDeallocatePacketIndex + 1))) {
         return;
     }
 
@@ -320,43 +321,31 @@ void Network::Init() {
     g_RakVmt = vmt;
     g_OriginalReceive = originalReceive;
     g_DeallocatePacket = reinterpret_cast<DeallocatePacketFn>(vmt[kDeallocatePacketIndex]);
-    g_SendRaw = reinterpret_cast<SendRawFn>(vmt[kSendRawIndex]);
 
     if (!WriteVmtEntry(vmt, kReceiveIndex, reinterpret_cast<DWORD>(&HookedReceive))) {
         g_RakClient = nullptr;
         g_RakVmt = nullptr;
         g_OriginalReceive = nullptr;
         g_DeallocatePacket = nullptr;
-        g_SendRaw = nullptr;
         return;
     }
 
-    g_Ready = true;
+    g_Ready.store(true, std::memory_order_release);
     Log("RakNet Receive hook installed: client=%p", rakClient);
 }
 
-void Network::RequestData() {
-    if (!g_Ready || !g_RakClient || !g_SendRaw) return;
-
-    const char packet[] = {static_cast<char>(kPktRequestData)};
-    g_SendRaw(g_RakClient, packet, static_cast<int>(sizeof(packet)),
-        2, 3, 0);
-}
-
 void Network::Shutdown() {
-    if (g_Ready && g_RakVmt &&
+    if (g_Ready.exchange(false, std::memory_order_acq_rel) && g_RakVmt &&
         g_RakVmt[kReceiveIndex] == reinterpret_cast<DWORD>(&HookedReceive) && g_OriginalReceive) {
         WriteVmtEntry(g_RakVmt, kReceiveIndex, reinterpret_cast<DWORD>(g_OriginalReceive));
     }
 
-    g_Ready = false;
     g_RakClient = nullptr;
     g_RakVmt = nullptr;
     g_OriginalReceive = nullptr;
     g_DeallocatePacket = nullptr;
-    g_SendRaw = nullptr;
 }
 
 bool Network::IsReady() {
-    return g_Ready;
+    return g_Ready.load(std::memory_order_acquire);
 }

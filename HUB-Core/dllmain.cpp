@@ -88,7 +88,6 @@ static DWORD WINAPI MainThread(LPVOID lpParam) {
     RoleConfig::InitDefaults();
     bool vehicleLimitPatchAttempted = false;
     bool hooksInstalledAttempted = false;
-    bool roleDataRequested = false;
     while (true) {
         std::this_thread::sleep_for(std::chrono::milliseconds(250));
 
@@ -99,7 +98,8 @@ static DWORD WINAPI MainThread(LPVOID lpParam) {
         CChat* pChat = GetRefChat();
         CInput* pInput = GetRefInput();
         if (!hooksInstalledAttempted && pChat && pInput) {
-            hooksInstalledAttempted = HookManager::Install();
+            hooksInstalledAttempted = true;
+            HookManager::Install();
         }
 
         CNetGame* netGame = GetRefNetGame();
@@ -112,23 +112,9 @@ static DWORD WINAPI MainThread(LPVOID lpParam) {
             Network::Init();
         }
 
-        bool localPlayerActive = false;
-        if (netGame) {
-            CPlayerPool* playerPool = netGame->GetPlayerPool();
-            CLocalPlayer* localPlayer = playerPool ? playerPool->GetLocalPlayer() : nullptr;
-            localPlayerActive = localPlayer && localPlayer->m_bIsActive;
-        }
-
-        if (localPlayerActive && Network::IsReady() && !roleDataRequested) {
-            Network::RequestData();
-            roleDataRequested = true;
-            Logger::Info("Requested role state from server.");
-        } else if (!localPlayerActive) {
-            roleDataRequested = false;
-        }
-
         if (pChat && !s_SpawnMessageSent) {
-            pChat->AddMessage(0x00FF00FF, "[HUB-Core] HUBCore.asi Version: " HUB_CORE_VERSION_STRING);
+            pChat->AddMessage(D3DCOLOR_ARGB(255, 0, 255, 0),
+                "[HUB-Core] HUBCore.asi Version: " HUB_CORE_VERSION_STRING);
             s_SpawnMessageSent = true;
             Logger::Info("Sent CChat startup message: HUBCore.asi Version %s", HUB_CORE_VERSION_STRING);
         } else if (!pChat) {

@@ -21,5 +21,5 @@ HUB-Core/x64/
 
 # Temporary diagnostic & dump files
 .diag/
-HUB-Core/samp_disasm.txt
-HUB-Core/symbols.txt
+HUB-Core/diagnostics/samp_disasm.txt
+HUB-Core/diagnostics/symbols.txt

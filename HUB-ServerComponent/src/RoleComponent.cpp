@@ -48,6 +48,10 @@ RoleComponent* GetRoleComponent() {
 }
 
 void RoleComponent::onLoad(ICore* c) {
+#if defined(_WIN32) || defined(_WIN64)
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+#endif
     core_ = c;
     s_RoleComponentInstance = this;
     Logger::Init();

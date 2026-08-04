@@ -54,6 +54,14 @@ add_library(${PROJECT_NAME} SHARED ${SOURCES} ${HEADERS})
 if(HUB_DEPLOY_ARTIFACTS)
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory "D:/GTA-Hub/Base/components"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "D:/GTA-Hub/Base/qawno/include"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/pawn/hubcore_role.inc"
+            "D:/GTA-Hub/Base/qawno/include/hubcore_role.inc"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "D:/GTA-Hub/Base/pawno/include"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/pawn/hubcore_role.inc"
+            "D:/GTA-Hub/Base/pawno/include/hubcore_role.inc"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "$<TARGET_FILE:${PROJECT_NAME}>"
             "D:/GTA-Hub/Base/components/$<TARGET_FILE_NAME:${PROJECT_NAME}>"

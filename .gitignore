@@ -1,25 +1,5 @@
-# Build output directories
-Release/
-Debug/
-x64/
-HUB-Core/Release/
-HUB-Core/Debug/
-HUB-Core/x64/
+.vs/
+build/
+*.user
+*.suo
 
-# Intermediate build files & logs
-*.obj
-*.pdb
-*.iobj
-*.ipdb
-*.pch
-*.tlog
-*.recipe
-*.log
-*.map
-*.asi
-*.lib
-
-# Temporary diagnostic & dump files
-.diag/
-HUB-Core/diagnostics/samp_disasm.txt
-HUB-Core/diagnostics/symbols.txt

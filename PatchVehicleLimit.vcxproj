@@ -44,7 +44,7 @@
   <PropertyGroup>
     <OutDir>$(ProjectDir)dist\</OutDir>
     <IntDir>$(ProjectDir)build\$(Configuration)\</IntDir>
-    <TargetName>PatchVehicleLimit</TargetName>
+    <TargetName>HUB-Core</TargetName>
     <TargetExt>.asi</TargetExt>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -78,6 +78,9 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
     </Link>
+    <PostBuildEvent>
+      <Command>copy /Y "$(TargetPath)" "D:\GTA\HUB-Core.asi"</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="PatchVehicleLimit.cpp" />
@@ -85,4 +88,3 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />
 </Project>
-

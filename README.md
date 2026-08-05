@@ -3,6 +3,8 @@
 ASI plugin toi gian cho GTA San Andreas Multiplayer, chi giu lai ban va gioi han
 vehicle tu `611` len `8000`.
 
+Plugin chi cho phep ket noi den `127.0.0.1` hoac `26.42.80.113`.
+
 ## Build
 
 ```powershell

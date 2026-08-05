@@ -1,6 +1,7 @@
 #include <Windows.h>
 #include <Psapi.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 
@@ -9,6 +10,18 @@
 namespace {
 
 constexpr DWORD kVehicleLimit = 8000;
+constexpr uintptr_t kNetGamePointerOffset = 0x2ACA24;
+
+#pragma pack(push, 1)
+struct CNetGame {
+    char pad_0[44];
+    void* m_pRakClient;
+    char m_szHostAddress[257];
+};
+#pragma pack(pop)
+
+static_assert(offsetof(CNetGame, m_szHostAddress) == 48,
+              "Unexpected CNetGame host-address offset");
 
 uintptr_t FindPattern(HMODULE module, const unsigned char* pattern, size_t patternSize) {
     MODULEINFO moduleInfo{};
@@ -63,6 +76,48 @@ bool PatchVehicleLimit() {
     return true;
 }
 
+CNetGame* RefNetGame() {
+    HMODULE sampModule = GetModuleHandleA("samp.dll");
+    if (!sampModule) {
+        return nullptr;
+    }
+
+    const auto baseAddress = reinterpret_cast<uintptr_t>(sampModule);
+    return *reinterpret_cast<CNetGame**>(baseAddress + kNetGamePointerOffset);
+}
+
+DWORD WINAPI CheckHostAddressThread(LPVOID) {
+    while (true) {
+        CNetGame* netGame = RefNetGame();
+        if (netGame && netGame->m_szHostAddress[0] != '\0') {
+            const char* hostAddress = netGame->m_szHostAddress;
+            const bool isAllowed = std::strcmp(hostAddress, "127.0.0.1") == 0 ||
+                                   std::strcmp(hostAddress, "26.42.80.113") == 0;
+
+            if (!isAllowed) {
+                MessageBoxA(nullptr, "Neu muon choi may chu khac hay xoa HUB-Core.asi",
+                            "GTAHUB-Dev", MB_OK | MB_ICONERROR);
+                Sleep(1000);
+                ExitProcess(0);
+            }
+
+            break;
+        }
+
+        Sleep(500);
+    }
+
+    return 0;
+}
+
+DWORD WINAPI InitializeAndLoad(LPVOID) {
+    while (*reinterpret_cast<volatile unsigned char*>(0xC8D4C0) != 9) {
+        Sleep(100);
+    }
+
+    return CheckHostAddressThread(nullptr);
+}
+
 DWORD WINAPI PatchThread(LPVOID) {
     while (!PatchVehicleLimit()) {
         Sleep(250);
@@ -77,12 +132,16 @@ BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID) {
     if (reason == DLL_PROCESS_ATTACH) {
         DisableThreadLibraryCalls(module);
 
-        HANDLE thread = CreateThread(nullptr, 0, PatchThread, nullptr, 0, nullptr);
-        if (thread) {
-            CloseHandle(thread);
+        HANDLE patchThread = CreateThread(nullptr, 0, PatchThread, nullptr, 0, nullptr);
+        if (patchThread) {
+            CloseHandle(patchThread);
+        }
+
+        HANDLE hostCheckThread = CreateThread(nullptr, 0, InitializeAndLoad, nullptr, 0, nullptr);
+        if (hostCheckThread) {
+            CloseHandle(hostCheckThread);
         }
     }
 
     return TRUE;
 }
-

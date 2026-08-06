@@ -37,6 +37,8 @@ struct VoiceFrame
     std::uint32_t channelId{};
     std::uint16_t sequence{};
     std::uint32_t timestampMs{};
+    float gain{1.0F};
+    float pan{};
     std::vector<std::uint8_t> encoded;
 };
 

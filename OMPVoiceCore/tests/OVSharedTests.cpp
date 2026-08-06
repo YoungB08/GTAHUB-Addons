@@ -4,6 +4,8 @@
 #include <filesystem>
 #include <iostream>
 
+int RunChannelTests();
+
 namespace
 {
 int failures = 0;
@@ -49,6 +51,8 @@ int main()
     std::error_code ignored;
     std::filesystem::remove(configPath, ignored);
     std::filesystem::remove(configPath.string() + ".bak", ignored);
+
+    failures += RunChannelTests();
 
     if (failures == 0) std::cout << "All shared tests passed\n";
     return failures == 0 ? 0 : 1;

@@ -45,6 +45,28 @@ target_link_libraries(ov_shared PUBLIC nlohmann_json::nlohmann_json)
 target_compile_features(ov_shared PUBLIC cxx_std_17)
 
 if(OV_BUILD_SERVER)
+    if(OV_FETCH_DEPENDENCIES)
+        FetchContent_Declare(
+            omp_sdk
+            GIT_REPOSITORY https://github.com/openmultiplayer/open.mp-sdk.git
+            GIT_TAG 3ee7bc4ab20c22359c34c08c38f93815b44bffd5
+            GIT_SHALLOW FALSE
+            GIT_SUBMODULES_RECURSE TRUE)
+        FetchContent_MakeAvailable(omp_sdk)
+    else()
+        find_package(OMP-SDK CONFIG REQUIRED)
+    endif()
+    if(OV_FETCH_DEPENDENCIES)
+        FetchContent_Declare(
+            pawn_sdk
+            GIT_REPOSITORY https://github.com/pawn-lang/compiler.git
+            GIT_TAG 1d13e22842bb54270c69696e7980aae7f9ae6a1f
+            GIT_SHALLOW FALSE)
+        FetchContent_GetProperties(pawn_sdk)
+        if(NOT pawn_sdk_POPULATED)
+            FetchContent_Populate(pawn_sdk)
+        endif()
+    endif()
     add_subdirectory(server)
 endif()
 

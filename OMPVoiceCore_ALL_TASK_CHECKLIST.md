@@ -69,22 +69,22 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## open.mp Component
 
-- [ ] `OMPVoiceCore` class
-- [ ] `onLoad()`
-- [ ] `onUnload()`
-- [ ] `componentName()`
-- [ ] `COMPONENT_ENTRY_POINT()`
+- [x] `OMPVoiceCore` class
+- [x] `onLoad()`
+- [ ] `onUnload()` (SDK không có callback này; destructor + `free()` đảm nhiệm unload)
+- [x] `componentName()`
+- [x] `COMPONENT_ENTRY_POINT()`
 
 ## UID
 
-- [ ] `PROVIDE_UID(0xD6FEE4A6B0EA27A3);`
+- [x] `PROVIDE_UID(0xD6FEE4A6B0EA27A3);`
 
 ## Voice socket
 
-- [ ] UDP socket create
-- [ ] Bind port 7775
-- [ ] Error log khi bind fail
-- [ ] Graceful shutdown socket
+- [x] UDP socket create
+- [x] Bind port 7775
+- [x] Error log khi bind fail
+- [x] Graceful shutdown socket
 
 ---
 
@@ -92,26 +92,26 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Include file
 
-- [ ] `ompvoice.inc`
-- [ ] Include guard
+- [x] `ompvoice.inc`
+- [x] Include guard
 - [ ] Native declarations đầy đủ
 
 ## Native implementations
 
-- [ ] `OV_EnableVoice`
-- [ ] `OV_IsTalking`
-- [ ] `OV_SetVolume`
-- [ ] `OV_SetMuted`
-- [ ] `OV_CreateChannel`
-- [ ] `OV_DestroyChannel`
-- [ ] `OV_SetTalkKey`
-- [ ] `OV_StartPhoneCall`
-- [ ] `OV_EndPhoneCall`
-- [ ] `OV_ShowHudIcon`
+- [x] `OV_EnableVoice`
+- [x] `OV_IsTalking`
+- [x] `OV_SetVolume`
+- [x] `OV_SetMuted`
+- [x] `OV_CreateChannel`
+- [x] `OV_DestroyChannel`
+- [x] `OV_SetTalkKey`
+- [x] `OV_StartPhoneCall`
+- [x] `OV_EndPhoneCall`
+- [x] `OV_ShowHudIcon`
 
 ## Registration
 
-- [ ] PawnManager registration
+- [x] PawnManager registration
 - [ ] Native lookup test
 - [ ] Gamemode compile test
 
@@ -345,9 +345,9 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 ## Handshake
 
 - [ ] Client send handshake
-- [ ] Server validate magic
-- [ ] Version validation
-- [ ] UID validation
+- [x] Server validate magic
+- [x] Version validation
+- [x] UID validation
 
 ## Reconnect
 
@@ -380,10 +380,10 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Stream lifecycle
 
-- [ ] Create per player
-- [ ] Destroy on disconnect
+- [x] Create per player
+- [x] Destroy on disconnect
 - [ ] Timeout after silence
-- [ ] Memory cleanup
+- [x] Memory cleanup
 
 ## Limits
 
@@ -397,10 +397,10 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Distance
 
-- [ ] Position fetch
-- [ ] Distance calculation
-- [ ] Volume attenuation
-- [ ] Pan calculation
+- [x] Position fetch
+- [x] Distance calculation
+- [x] Volume attenuation
+- [x] Pan calculation
 
 ## Validation
 
@@ -415,10 +415,10 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Logic
 
-- [ ] `distance == -1.0f`
-- [ ] Skip distance checks
-- [ ] Full volume
-- [ ] Center pan
+- [x] `distance == -1.0f`
+- [x] Skip distance checks
+- [x] Full volume
+- [x] Center pan
 
 ---
 
@@ -426,15 +426,15 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Detection
 
-- [ ] Same vehicle check
-- [ ] Vehicle enter update
-- [ ] Vehicle exit update
+- [x] Same vehicle check
+- [x] Vehicle enter update
+- [x] Vehicle exit update
 
 ## Audio
 
-- [ ] Ignore distance
-- [ ] Full volume
-- [ ] Center pan
+- [x] Ignore distance
+- [x] Full volume
+- [x] Center pan
 
 ---
 
@@ -449,9 +449,9 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## API
 
-- [ ] Create radio channel
-- [ ] Join radio channel
-- [ ] Leave radio channel
+- [x] Create radio channel
+- [x] Join radio channel
+- [x] Leave radio channel
 
 ---
 
@@ -459,17 +459,17 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Core
 
-- [ ] Start call
-- [ ] End call
-- [ ] Busy state
-- [ ] Disconnect cleanup
+- [x] Start call
+- [x] End call
+- [x] Busy state
+- [x] Disconnect cleanup
 
 ## Leak radius
 
-- [ ] Default 8m
+- [x] Default 8m
 - [ ] Configurable 5–10m
-- [ ] Nearby listener hears partial audio
-- [ ] Far listener hears nothing
+- [x] Nearby listener hears partial audio
+- [x] Far listener hears nothing
 
 ## Phone effect
 

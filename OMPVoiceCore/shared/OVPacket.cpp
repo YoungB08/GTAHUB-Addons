@@ -1,6 +1,7 @@
 #include "OVPacket.h"
 
 #include <limits>
+#include <cstring>
 
 namespace ov
 {
@@ -22,6 +23,14 @@ void WriteU64(std::vector<std::uint8_t>& out, std::uint64_t value)
 {
     for (unsigned int shift = 0; shift < 64; shift += 8)
         out.push_back(static_cast<std::uint8_t>(value >> shift));
+}
+
+void WriteF32(std::vector<std::uint8_t>& out, float value)
+{
+    std::uint32_t bits = 0;
+    static_assert(sizeof(bits) == sizeof(value));
+    std::memcpy(&bits, &value, sizeof(bits));
+    WriteU32(out, bits);
 }
 
 bool ReadU16(const std::vector<std::uint8_t>& in, std::size_t& offset, std::uint16_t& value)
@@ -48,6 +57,14 @@ bool ReadU64(const std::vector<std::uint8_t>& in, std::size_t& offset, std::uint
     value = 0;
     for (unsigned int shift = 0; shift < 64; shift += 8)
         value |= static_cast<std::uint64_t>(in[offset++]) << shift;
+    return true;
+}
+
+bool ReadF32(const std::vector<std::uint8_t>& in, std::size_t& offset, float& value)
+{
+    std::uint32_t bits = 0;
+    if (!ReadU32(in, offset, bits)) return false;
+    std::memcpy(&value, &bits, sizeof(value));
     return true;
 }
 
@@ -103,11 +120,13 @@ std::vector<std::uint8_t> SerializeVoiceFrame(const VoiceFrame& frame)
 {
     if (frame.encoded.empty() || frame.encoded.size() > MAX_ENCODED_FRAME) return {};
     std::vector<std::uint8_t> payload;
-    payload.reserve(frame.encoded.size() + 14);
+    payload.reserve(frame.encoded.size() + 22);
     WriteU16(payload, frame.playerId);
     WriteU32(payload, frame.channelId);
     WriteU16(payload, frame.sequence);
     WriteU32(payload, frame.timestampMs);
+    WriteF32(payload, frame.gain);
+    WriteF32(payload, frame.pan);
     WriteU16(payload, static_cast<std::uint16_t>(frame.encoded.size()));
     payload.insert(payload.end(), frame.encoded.begin(), frame.encoded.end());
     return Wrap(OVPacket::VoiceData, payload);
@@ -116,7 +135,7 @@ std::vector<std::uint8_t> SerializeVoiceFrame(const VoiceFrame& frame)
 std::optional<VoiceFrame> ParseVoiceFrame(const std::vector<std::uint8_t>& datagram)
 {
     const auto packet = DecodeDatagram(datagram.data(), datagram.size());
-    if (!packet || packet->type != OVPacket::VoiceData || packet->payload.size() < 15) return std::nullopt;
+    if (!packet || packet->type != OVPacket::VoiceData || packet->payload.size() < 23) return std::nullopt;
     VoiceFrame frame;
     std::size_t offset = 0;
     std::uint16_t encodedSize = 0;
@@ -124,6 +143,8 @@ std::optional<VoiceFrame> ParseVoiceFrame(const std::vector<std::uint8_t>& datag
         !ReadU32(packet->payload, offset, frame.channelId) ||
         !ReadU16(packet->payload, offset, frame.sequence) ||
         !ReadU32(packet->payload, offset, frame.timestampMs) ||
+        !ReadF32(packet->payload, offset, frame.gain) ||
+        !ReadF32(packet->payload, offset, frame.pan) ||
         !ReadU16(packet->payload, offset, encodedSize)) return std::nullopt;
     if (encodedSize == 0 || encodedSize > MAX_ENCODED_FRAME || offset + encodedSize != packet->payload.size()) return std::nullopt;
     frame.encoded.assign(packet->payload.begin() + static_cast<std::ptrdiff_t>(offset), packet->payload.end());

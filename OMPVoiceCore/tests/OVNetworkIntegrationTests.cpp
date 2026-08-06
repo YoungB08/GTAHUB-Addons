@@ -37,6 +37,8 @@ int main()
     ov::server::OVChannelManager channels;
     ov::server::OVVoiceServer server(channels);
     if (!server.Start()) return Fail("UDP 7775 bind");
+    ov::server::OVVoiceServer duplicateServer(channels);
+    if (duplicateServer.Start()) return Fail("duplicate UDP 7775 bind accepted");
 
     std::vector<std::unique_ptr<ov::client::OVNetworkClient>> clients;
     for (std::uint16_t playerId = 1; playerId <= 50; ++playerId)

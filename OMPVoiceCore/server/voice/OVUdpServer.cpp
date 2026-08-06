@@ -90,8 +90,20 @@ bool OVUdpServer::Start(std::uint16_t port, PacketHandler handler)
 #endif
         return false;
     }
+#ifdef _WIN32
+    BOOL exclusive = TRUE;
+    if (setsockopt(socket, SOL_SOCKET, SO_EXCLUSIVEADDRUSE,
+                   reinterpret_cast<const char*>(&exclusive), sizeof(exclusive)) != 0)
+    {
+        OV_LOG_ERROR("Network", "UDP exclusive-address setup failed");
+        CloseSocket(socket);
+        WSACleanup();
+        return false;
+    }
+#else
     int reuse = 1;
     setsockopt(socket, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&reuse), sizeof(reuse));
+#endif
     sockaddr_in address{};
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = htonl(INADDR_ANY);

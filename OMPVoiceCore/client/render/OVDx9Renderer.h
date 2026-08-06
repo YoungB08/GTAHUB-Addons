@@ -31,6 +31,7 @@ public:
     void OnResetAfter(IDirect3DDevice9* device);
     void ToggleSettings() noexcept;
     void SetOverlayVisible(bool visible) noexcept;
+    void SetFakeRemote(bool enabled) noexcept { fakeRemote_ = enabled; }
     [[nodiscard]] bool IsInitialized() const noexcept { return initialized_; }
 
 private:
@@ -46,5 +47,6 @@ private:
     IDirect3DDevice9* device_{};
     bool initialized_{};
     bool settingsOpen_{};
+    bool fakeRemote_{};
 };
 }

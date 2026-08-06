@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 
 namespace ov::client
 {
@@ -34,7 +35,7 @@ void OVAudioEngine::Shutdown()
 }
 bool OVAudioEngine::StartCapture()
 {
-    if (!initialized_ || !capture_.Initialize(-1) || !capture_.Start()) return false;
+    if (!initialized_ || !capture_.Initialize(inputDevice_) || !capture_.Start()) return false;
     if (!running_.exchange(true)) audioThread_ = std::thread(&OVAudioEngine::ProcessLoop, this);
     OV_LOG_INFO("Audio", "Capture started at %u Hz, 16-bit mono", SAMPLE_RATE);
     return true;
@@ -46,6 +47,13 @@ void OVAudioEngine::StopCapture()
 }
 void OVAudioEngine::SetMasterVolume(float volume) { playback_.SetMasterVolume(std::clamp(volume, 0.0F, 1.0F)); }
 void OVAudioEngine::SetMicrophoneVolume(float volume) { microphoneVolume_ = std::clamp(volume, 0.0F, 2.0F); }
+bool OVAudioEngine::SetInputDevice(int device)
+{
+    inputDevice_ = device;
+    if (!capture_.IsCapturing()) return true;
+    StopCapture();
+    return StartCapture();
+}
 void OVAudioEngine::SetFrameHandler(EncodedFrameHandler handler) { std::lock_guard<std::mutex> lock(handlerMutex_); frameHandler_ = std::move(handler); }
 void OVAudioEngine::OnRemoteFrame(VoiceFrame frame) { remoteQueue_.Push(std::move(frame)); }
 void OVAudioEngine::Update() { if (!running_) ProcessRemote(); }
@@ -72,7 +80,16 @@ void OVAudioEngine::ProcessCapture()
         if (highPassEnabled_) highPass_.Process(pcm);
         if (noiseSuppressionEnabled_) noiseGate_.Process(pcm);
         agc_.Process(pcm);
-        if (!transmitting_ || pcm.empty()) continue;
+        const float rms = capture_.Rms();
+        if (voiceActivationEnabled_)
+        {
+            if (rms >= voiceActivationThreshold_) { activationFrames_ = std::min(activationFrames_ + 1, 2); releaseFrames_ = 10; }
+            else { activationFrames_ = 0; if (releaseFrames_ > 0) --releaseFrames_; }
+            if (activationFrames_ >= 2) voiceActive_ = true;
+            if (releaseFrames_ == 0) voiceActive_ = false;
+        }
+        else voiceActive_ = false;
+        if ((!transmitting_ && !voiceActive_) || pcm.empty()) continue;
         auto encoded = encoder_.Encode(pcm.data(), pcm.size());
         if (encoded.empty()) continue;
         if (loopback_) playback_.PushMono(loopbackDecoder_.Decode(encoded.data(), encoded.size(), false), 1.0F, 0.0F);
@@ -85,14 +102,53 @@ void OVAudioEngine::ProcessRemote()
 {
     while (auto frame = remoteQueue_.TryPop())
     {
+        if (remoteStreams_.find(frame->playerId) == remoteStreams_.end() && remoteStreams_.size() >= MAX_SIMULTANEOUS_VOICES)
+        {
+            const auto quietest = std::min_element(remoteStreams_.begin(), remoteStreams_.end(), [](const auto& left, const auto& right) { return left.second.gain < right.second.gain; });
+            if (quietest != remoteStreams_.end()) remoteStreams_.erase(quietest);
+        }
         auto& stream = remoteStreams_[frame->playerId];
         if (!stream.initialized) { stream.initialized = stream.decoder.Initialize(); }
+        stream.gain = frame->gain;
+        stream.pan = frame->pan;
+        stream.mode = frame->mode;
+        stream.lastPacket = std::chrono::steady_clock::now();
         stream.jitter.Push(frame->sequence, std::move(frame->encoded));
         while (auto packet = stream.jitter.Pop())
         {
-            const auto pcm = stream.decoder.Decode(packet->encoded.data(), packet->encoded.size(), packet->encoded.empty());
-            playback_.PushMono(pcm, frame->gain, frame->pan);
+            auto pcm = stream.decoder.Decode(packet->encoded.data(), packet->encoded.size(), packet->encoded.empty());
+            ApplyModeEffect(stream, pcm);
+            playback_.PushMono(pcm, stream.gain, stream.pan);
         }
+    }
+    const auto now = std::chrono::steady_clock::now();
+    for (auto it = remoteStreams_.begin(); it != remoteStreams_.end();)
+    {
+        if (it->second.lastPacket.time_since_epoch().count() != 0 && now - it->second.lastPacket > std::chrono::seconds(1)) it = remoteStreams_.erase(it);
+        else ++it;
+    }
+    remoteStreamCount_ = remoteStreams_.size();
+}
+
+void OVAudioEngine::ApplyModeEffect(RemoteStream& stream, std::vector<std::int16_t>& pcm)
+{
+    if (stream.mode != VoiceMode::Radio && stream.mode != VoiceMode::Phone) return;
+    stream.effectHighPass.Process(pcm);
+    const float cutoff = stream.mode == VoiceMode::Phone ? 3400.0F : 3000.0F;
+    const float alpha = (2.0F * 3.14159265F * cutoff / static_cast<float>(SAMPLE_RATE)) /
+        (1.0F + 2.0F * 3.14159265F * cutoff / static_cast<float>(SAMPLE_RATE));
+    std::uint32_t noise = 0x9E3779B9U;
+    for (auto& sample : pcm)
+    {
+        stream.lowPassState += alpha * (static_cast<float>(sample) - stream.lowPassState);
+        float value = stream.lowPassState;
+        value = value / (1.0F + std::abs(value) / 16000.0F) * 1.35F;
+        if (stream.mode == VoiceMode::Radio)
+        {
+            noise = noise * 1664525U + 1013904223U;
+            value += static_cast<float>(static_cast<int>((noise >> 24U) & 0xFFU) - 128) * 4.0F;
+        }
+        sample = static_cast<std::int16_t>(std::clamp(value, -32768.0F, 32767.0F));
     }
 }
 }

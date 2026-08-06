@@ -128,6 +128,7 @@ void OVVoiceServer::OnVoiceData(const UdpEndpoint& endpoint, const std::vector<s
         VoiceFrame outgoing = *frame;
         outgoing.gain = recipient.gain;
         outgoing.pan = recipient.pan;
+        outgoing.mode = recipient.mode;
         SendToPlayer(recipient.playerId, SerializeVoiceFrame(outgoing));
     }
 }

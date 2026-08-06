@@ -1,0 +1,21 @@
+# OMPVoiceCore installation
+
+## Server
+
+1. Copy `plugins/ompvoice.dll` into the open.mp `components/` directory.
+2. Keep the component in the server process; it binds voice UDP port `7775`
+   independently of the game server port.
+3. Copy `ompvoice.inc` into `pawno/include` and include it from the gamemode.
+4. Use the `OV_*` natives after the Pawn component has loaded.
+
+## Client
+
+1. Copy `ompvoice/ov_client.asi` beside the SA:MP 0.3.DL R1 executable.
+2. Put the official 32-bit `bass.dll` and `bass_fx.dll` beside the ASI. These
+   files are not redistributed by this project.
+3. Copy the complete `ompvoice/` directory beside the ASI. The client creates
+   `logs`, `records`, and `debug` directories automatically.
+4. Set the server address in the client configuration when it is not local.
+
+The game client and open.mp server must be allowed to send UDP traffic on port
+7775. `/ovdiag` writes a diagnostic report under `ompvoice/debug`.

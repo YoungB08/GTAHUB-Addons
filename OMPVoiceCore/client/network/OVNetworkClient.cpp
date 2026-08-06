@@ -100,14 +100,14 @@ bool OVNetworkClient::Send(const std::vector<std::uint8_t>& packet)
 bool OVNetworkClient::SendVoiceBegin(std::uint32_t channelId)
 {
     (void)channelId;
-    return Send(SerializeControl(OVPacket::VoiceBegin, playerId_));
+    return connected_ && Send(SerializeControl(OVPacket::VoiceBegin, playerId_));
 }
 bool OVNetworkClient::SendVoiceFrame(VoiceFrame frame)
 {
     frame.playerId = playerId_;
-    return Send(SerializeVoiceFrame(frame));
+    return connected_ && Send(SerializeVoiceFrame(frame));
 }
-bool OVNetworkClient::SendVoiceEnd() { return Send(SerializeControl(OVPacket::VoiceEnd, playerId_)); }
+bool OVNetworkClient::SendVoiceEnd() { return connected_ && Send(SerializeControl(OVPacket::VoiceEnd, playerId_)); }
 
 void OVNetworkClient::TryReconnect()
 {
@@ -115,7 +115,6 @@ void OVNetworkClient::TryReconnect()
     const auto handshake = SerializeHandshake(Handshake{});
     if (Send(handshake))
     {
-        connected_ = true;
         retryIndex_ = 0;
         OV_LOG_INFO("Network", "Handshake sent to %s:%u", host_.c_str(), port_);
     }

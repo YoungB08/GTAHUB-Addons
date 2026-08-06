@@ -120,13 +120,14 @@ std::vector<std::uint8_t> SerializeVoiceFrame(const VoiceFrame& frame)
 {
     if (frame.encoded.empty() || frame.encoded.size() > MAX_ENCODED_FRAME) return {};
     std::vector<std::uint8_t> payload;
-    payload.reserve(frame.encoded.size() + 22);
+    payload.reserve(frame.encoded.size() + 23);
     WriteU16(payload, frame.playerId);
     WriteU32(payload, frame.channelId);
     WriteU16(payload, frame.sequence);
     WriteU32(payload, frame.timestampMs);
     WriteF32(payload, frame.gain);
     WriteF32(payload, frame.pan);
+    payload.push_back(static_cast<std::uint8_t>(frame.mode));
     WriteU16(payload, static_cast<std::uint16_t>(frame.encoded.size()));
     payload.insert(payload.end(), frame.encoded.begin(), frame.encoded.end());
     return Wrap(OVPacket::VoiceData, payload);
@@ -135,7 +136,7 @@ std::vector<std::uint8_t> SerializeVoiceFrame(const VoiceFrame& frame)
 std::optional<VoiceFrame> ParseVoiceFrame(const std::vector<std::uint8_t>& datagram)
 {
     const auto packet = DecodeDatagram(datagram.data(), datagram.size());
-    if (!packet || packet->type != OVPacket::VoiceData || packet->payload.size() < 23) return std::nullopt;
+    if (!packet || packet->type != OVPacket::VoiceData || packet->payload.size() < 24) return std::nullopt;
     VoiceFrame frame;
     std::size_t offset = 0;
     std::uint16_t encodedSize = 0;
@@ -144,8 +145,9 @@ std::optional<VoiceFrame> ParseVoiceFrame(const std::vector<std::uint8_t>& datag
         !ReadU16(packet->payload, offset, frame.sequence) ||
         !ReadU32(packet->payload, offset, frame.timestampMs) ||
         !ReadF32(packet->payload, offset, frame.gain) ||
-        !ReadF32(packet->payload, offset, frame.pan) ||
-        !ReadU16(packet->payload, offset, encodedSize)) return std::nullopt;
+        !ReadF32(packet->payload, offset, frame.pan) || offset >= packet->payload.size() || packet->payload[offset] > static_cast<std::uint8_t>(VoiceMode::Global)) return std::nullopt;
+    frame.mode = static_cast<VoiceMode>(packet->payload[offset++]);
+    if (!ReadU16(packet->payload, offset, encodedSize)) return std::nullopt;
     if (encodedSize == 0 || encodedSize > MAX_ENCODED_FRAME || offset + encodedSize != packet->payload.size()) return std::nullopt;
     frame.encoded.assign(packet->payload.begin() + static_cast<std::ptrdiff_t>(offset), packet->payload.end());
     return frame;

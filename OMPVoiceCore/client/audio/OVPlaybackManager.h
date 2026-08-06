@@ -21,7 +21,7 @@ public:
     [[nodiscard]] bool IsReady() const noexcept { return stream_ != 0; }
 
 private:
-    static BassDword OnStream(BassHandle handle, void* buffer, BassDword length, void* user);
+    static BassDword OV_BASS_CALL OnStream(BassHandle handle, void* buffer, BassDword length, void* user);
     OVBassApi& bass_;
     BassHandle stream_{};
     std::mutex mutex_;

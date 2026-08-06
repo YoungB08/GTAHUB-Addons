@@ -1,6 +1,7 @@
 #pragma once
 
 #include "OVConstants.h"
+#include "OVTypes.h"
 
 #include <cstdint>
 #include <optional>
@@ -39,6 +40,7 @@ struct VoiceFrame
     std::uint32_t timestampMs{};
     float gain{1.0F};
     float pan{};
+    VoiceMode mode{VoiceMode::Proximity};
     std::vector<std::uint8_t> encoded;
 };
 

@@ -1,4 +1,5 @@
 #include "shared/OVConfig.h"
+#include "shared/OVCrashSafety.h"
 #include "shared/OVPacket.h"
 
 #include <filesystem>
@@ -29,10 +30,12 @@ int main()
     frame.channelId = 42;
     frame.sequence = 65530;
     frame.timestampMs = 123456;
+    frame.mode = ov::VoiceMode::Radio;
     frame.encoded = {1, 2, 3, 4};
     const auto frameBytes = ov::SerializeVoiceFrame(frame);
     const auto parsedFrame = ov::ParseVoiceFrame(frameBytes);
     Check(parsedFrame && parsedFrame->encoded == frame.encoded, "voice payload roundtrip");
+    Check(parsedFrame && parsedFrame->mode == ov::VoiceMode::Radio, "voice mode roundtrip");
     auto corrupt = frameBytes;
     corrupt.pop_back();
     Check(!ov::ParseVoiceFrame(corrupt), "truncated datagram rejected");
@@ -53,6 +56,8 @@ int main()
     std::filesystem::remove(configPath.string() + ".bak", ignored);
 
     failures += RunChannelTests();
+    Check(ov::CrashSafety::Install(std::filesystem::temp_directory_path() / "ompvoice-crash-test"), "crash handler install");
+    ov::CrashSafety::Uninstall();
 
     if (failures == 0) std::cout << "All shared tests passed\n";
     return failures == 0 ? 0 : 1;

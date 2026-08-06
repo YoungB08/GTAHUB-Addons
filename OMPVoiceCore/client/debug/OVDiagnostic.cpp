@@ -20,6 +20,7 @@ bool OVDiagnostic::Run(const OVBassApi& bass, const OVAudioEngine& audio, bool d
     if (!report) return false;
     report << "OMPVoiceCore client diagnostic\n"
            << (bass.IsLoaded() ? "[PASS] BASS initialized\n" : "[FAIL] BASS initialized\n")
+           << (bass.IsFxLoaded() ? "[PASS] BASS FX loaded\n" : "[WARN] BASS FX not loaded; DSP fallback active\n")
            << (audio.IsCapturing() ? "[PASS] Microphone capture\n" : "[WARN] Microphone capture stopped\n")
            << "[PASS] Opus encoder path compiled\n"
            << "[PASS] Voice UDP port " << OMPVOICE_PORT << " configured\n"

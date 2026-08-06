@@ -113,20 +113,23 @@ std::vector<VoiceRecipient> OVChannelManager::Recipients(int sourceId, std::uint
         if (id == sourceId || !listener.voiceEnabled || listener.mutedPlayers.count(sourceId) != 0) continue;
         float gain = 0.0F;
         float pan = 0.0F;
+        VoiceMode deliveryMode = channel.mode;
         const float distance = sourceIt->second.position.DistanceTo(listener.position);
         const bool phoneParticipant = listener.phoneTarget == sourceId || sourceIt->second.phoneTarget == id;
         const bool phoneLeak = sourceIt->second.phoneTarget != -1 && distance <= PHONE_LEAK_RADIUS;
         const bool sameVehicle = sourceIt->second.vehicleId >= 0 && sourceIt->second.vehicleId == listener.vehicleId;
         const bool sameRadio = channel.mode == VoiceMode::Radio && listener.radioChannels.count(channelId) != 0 && sourceIt->second.radioChannels.count(channelId) != 0;
-        if (phoneParticipant) gain = 1.0F;
-        else if (phoneLeak) gain = 0.30F * std::max(0.0F, 1.0F - distance / PHONE_LEAK_RADIUS);
-        else if (channel.mode == VoiceMode::Global || sameVehicle || (channel.mode == VoiceMode::Radio && sameRadio)) gain = 1.0F;
+        if (phoneParticipant) { gain = 1.0F; deliveryMode = VoiceMode::Phone; }
+        else if (phoneLeak) { gain = 0.30F * std::max(0.0F, 1.0F - distance / PHONE_LEAK_RADIUS); deliveryMode = VoiceMode::Phone; }
+        else if (channel.mode == VoiceMode::Global) gain = 1.0F;
+        else if (sameVehicle) { gain = 1.0F; deliveryMode = VoiceMode::Vehicle; }
+        else if (channel.mode == VoiceMode::Radio && sameRadio) { gain = 1.0F; deliveryMode = VoiceMode::Radio; }
         else if (distance <= channel.hearDistance)
         {
             gain = distance <= 1.0F ? 1.0F : std::max(0.0F, 1.0F - (distance - 1.0F) / std::max(1.0F, channel.hearDistance - 1.0F));
             if (distance > 0.01F) pan = std::clamp((listener.position.x - sourceIt->second.position.x) / channel.hearDistance, -1.0F, 1.0F);
         }
-        if (gain > 0.0F) result.push_back({id, std::clamp(gain * sourceIt->second.volume, 0.0F, 2.0F), pan});
+        if (gain > 0.0F) result.push_back({id, std::clamp(gain * sourceIt->second.volume, 0.0F, 2.0F), pan, deliveryMode});
     }
     return result;
 }

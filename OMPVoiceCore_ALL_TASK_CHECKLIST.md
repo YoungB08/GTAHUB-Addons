@@ -20,8 +20,8 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 ## Build system
 
 - [x] CMakeLists.txt root
-- [ ] Win32 build
-- [ ] x64 build
+- [x] Win32 build
+- [x] x64 build
 - [ ] Visual Studio 2022 solution generate
 - [x] Output thư mục `build/bin`
 - [x] Output thư mục `build/lib`
@@ -44,18 +44,18 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Opus
 
-- [ ] opus.lib
-- [ ] Include path đúng
+- [x] opus.lib
+- [x] Include path đúng
 
 ## ImGui
 
-- [ ] imgui core
-- [ ] imgui_impl_dx9
-- [ ] imgui_impl_win32
+- [x] imgui core
+- [x] imgui_impl_dx9
+- [x] imgui_impl_win32
 
 ## MinHook
 
-- [ ] Compile static
+- [x] Compile static
 - [ ] Hook test thành công
 
 ## JSON
@@ -94,7 +94,7 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 - [x] `ompvoice.inc`
 - [x] Include guard
-- [ ] Native declarations đầy đủ
+- [x] Native declarations đầy đủ
 
 ## Native implementations
 
@@ -129,9 +129,9 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 ## SA:MP detection
 
 - [x] `samp.dll` detect
-- [ ] 0.3.DL R1 detect
-- [ ] Version fallback
-- [ ] Error message nếu unsupported
+- [x] 0.3.DL R1 detect
+- [x] Version fallback
+- [x] Error message nếu unsupported
 
 ---
 
@@ -139,23 +139,23 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Hook setup
 
-- [ ] Get D3D9 device
-- [ ] Hook `EndScene`
-- [ ] Hook `Reset`
-- [ ] Hook restore on unload
+- [x] Get D3D9 device
+- [x] Hook `EndScene`
+- [x] Hook `Reset`
+- [x] Hook restore on unload
 
 ## Rendering
 
-- [ ] Sprite renderer
-- [ ] Texture manager
-- [ ] Font rendering
-- [ ] Alpha blending đúng
+- [x] Sprite renderer
+- [x] Texture manager
+- [x] Font rendering
+- [x] Alpha blending đúng
 
 ## ALT+TAB
 
-- [ ] Invalidate device objects
-- [ ] Recreate device objects
-- [ ] Texture reload
+- [x] Invalidate device objects
+- [x] Recreate device objects
+- [x] Texture reload
 - [ ] No crash after 20 ALT+TAB tests
 
 ---
@@ -164,11 +164,11 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## PNG loading
 
-- [ ] `logo.png`
-- [ ] `micro_active.png`
-- [ ] `micro_muted.png`
-- [ ] `micro_passive.png`
-- [ ] `speaker.png`
+- [x] `logo.png`
+- [x] `micro_active.png`
+- [x] `micro_muted.png`
+- [x] `micro_passive.png`
+- [x] `speaker.png`
 
 ## Fallback
 
@@ -183,17 +183,17 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## BASS init
 
-- [ ] `BASS_Init`
-- [ ] Output device enumerate
-- [ ] Default device select
-- [ ] Device change support
+- [x] `BASS_Init`
+- [x] Output device enumerate
+- [x] Default device select
+- [x] Device change support
 
 ## Capture init
 
-- [ ] `BASS_RecordInit`
-- [ ] Input device enumerate
-- [ ] Default mic select
-- [ ] Start/stop capture stable
+- [x] `BASS_RecordInit`
+- [x] Input device enumerate
+- [x] Default mic select
+- [x] Start/stop capture stable
 
 ---
 
@@ -238,10 +238,10 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Detection
 
-- [ ] RMS threshold
-- [ ] Configurable threshold
-- [ ] Attack time
-- [ ] Release time
+- [x] RMS threshold
+- [x] Configurable threshold
+- [x] Attack time
+- [x] Release time
 
 ## UI
 
@@ -382,12 +382,12 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 - [x] Create per player
 - [x] Destroy on disconnect
-- [ ] Timeout after silence
+- [x] Timeout after silence
 - [x] Memory cleanup
 
 ## Limits
 
-- [ ] Max simultaneous voices = 8
+- [x] Max simultaneous voices = 8
 - [ ] Priority sorting
 - [ ] Closest player selection
 
@@ -404,10 +404,10 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Validation
 
-- [ ] 1m = full volume
-- [ ] 25m = near zero
-- [ ] No negative volume
-- [ ] Stereo pan clamped
+- [x] 1m = full volume
+- [x] 25m = near zero
+- [x] No negative volume
+- [x] Stereo pan clamped
 
 ---
 
@@ -442,10 +442,10 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Effects
 
-- [ ] Band-pass filter
-- [ ] Compression
-- [ ] Static noise layer
-- [ ] Toggle effect per channel
+- [x] Band-pass filter
+- [x] Compression
+- [x] Static noise layer
+- [x] Toggle effect per channel
 
 ## API
 
@@ -473,8 +473,8 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Phone effect
 
-- [ ] 300–3400 Hz EQ
-- [ ] Slight compression
+- [x] 300–3400 Hz EQ
+- [x] Slight compression
 - [ ] GSM-like sound
 
 ---
@@ -508,7 +508,7 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Visuals
 
-- [ ] `speaker.png`
+- [x] `speaker.png`
 - [ ] Pulse animation
 - [ ] Scale setting
 - [ ] Offset X/Y setting
@@ -530,7 +530,7 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 ## Microphone tab
 
 - [x] Enable microphone
-- [ ] Input device combo
+- [x] Input device combo
 - [x] Mic volume slider
 - [x] Test microphone
 - [x] HUD icon controls
@@ -564,16 +564,16 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Mirror mode
 
-- [ ] Simulate server echo
-- [ ] Pass through jitter buffer
-- [ ] Pass through decoder
-- [ ] Trigger remote playback path
+- [x] Simulate server echo
+- [x] Pass through jitter buffer
+- [x] Pass through decoder
+- [x] Trigger remote playback path
 
 ## Fake remote player (F9)
 
-- [ ] Spawn fake remote entity
-- [ ] Render speaker icon
-- [ ] Simulate talking timeout
+- [x] Spawn fake remote entity
+- [x] Render speaker icon
+- [x] Simulate talking timeout
 - [ ] Test attenuation and pan
 
 ## Packet simulator
@@ -581,7 +581,7 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 - [x] Packet loss slider
 - [x] Latency slider
 - [x] Jitter slider
-- [ ] Real packet dropping
+- [x] Real packet dropping
 
 ## Oscilloscope
 
@@ -592,7 +592,7 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Diagnostic command
 
-- [ ] `/ovdiag`
+- [x] `/ovdiag`
 - [x] Generate text report
 - [x] Check all subsystems
 - [x] Save to `debug/diagnostic_report.txt`
@@ -603,10 +603,10 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Files
 
-- [ ] `client.log`
-- [ ] `server.log`
-- [ ] `audio.log`
-- [ ] `network.log`
+- [x] `client.log`
+- [x] `server.log`
+- [x] `audio.log`
+- [x] `network.log`
 
 ## Features
 
@@ -621,10 +621,10 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Exception handling
 
-- [ ] Unhandled exception filter
-- [ ] Minidump generation
-- [ ] Stack trace logging
-- [ ] Module list logging
+- [x] Unhandled exception filter
+- [x] Minidump generation
+- [x] Stack trace logging
+- [x] Module list logging
 
 ## Assertions
 
@@ -651,14 +651,14 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Render thread
 
-- [ ] DX9 rendering
-- [ ] ImGui rendering
-- [ ] HUD rendering
+- [x] DX9 rendering
+- [x] ImGui rendering
+- [x] HUD rendering
 
 ## Validation
 
-- [ ] No BASS playback from network thread
-- [ ] Thread-safe queues
+- [x] No BASS playback from network thread
+- [x] Thread-safe queues
 - [ ] No deadlocks under stress test
 
 ---
@@ -756,8 +756,8 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 - [ ] `bass.dll`
 - [ ] `bass_fx.dll`
 - [x] `README.md`
-- [ ] `INSTALL.md`
-- [ ] `CHANGELOG.md`
+- [x] `INSTALL.md`
+- [x] `CHANGELOG.md`
 
 ## Verification
 

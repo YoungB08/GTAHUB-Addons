@@ -5,6 +5,7 @@
 #include <fstream>
 #include <mutex>
 #include <string>
+#include <unordered_map>
 
 namespace ov
 {
@@ -22,7 +23,9 @@ private:
     void RotateIfNeeded();
     std::mutex mutex_;
     std::ofstream stream_;
+    std::unordered_map<std::string, std::ofstream> subsystemStreams_;
     std::filesystem::path path_;
+    std::string primaryFileName_;
     std::string threadName_{"Main"};
     std::size_t maxBytes_{4U * 1024U * 1024U};
 };

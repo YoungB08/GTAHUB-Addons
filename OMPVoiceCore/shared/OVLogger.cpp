@@ -26,6 +26,7 @@ bool Logger::Initialize(const std::filesystem::path& directory, const std::strin
     std::filesystem::create_directories(directory, error);
     if (error) return false;
     path_ = directory / fileName;
+    primaryFileName_ = fileName;
     threadName_ = threadName;
     RotateIfNeeded();
     stream_.open(path_, std::ios::app);
@@ -36,6 +37,8 @@ void Logger::Shutdown()
 {
     std::lock_guard<std::mutex> lock(mutex_);
     if (stream_.is_open()) stream_.close();
+    for (auto& [_, stream] : subsystemStreams_) if (stream.is_open()) stream.close();
+    subsystemStreams_.clear();
 }
 
 void Logger::RotateIfNeeded()
@@ -76,10 +79,27 @@ void Logger::Write(LogLevel level, const char* subsystem, const char* format, ..
     formatted += threadName_ + "][" + (subsystem ? subsystem : "Core") + "][" + names[static_cast<int>(level)] + "] " + message.data() + '\n';
 
     std::lock_guard<std::mutex> lock(mutex_);
-    if (stream_.is_open())
+    std::ofstream* output = &stream_;
+    const std::string subsystemName = subsystem ? subsystem : "Core";
+    std::string routedFile;
+    if (subsystemName == "Audio") routedFile = "audio.log";
+    else if (subsystemName == "Network") routedFile = "network.log";
+    else if (subsystemName == "Server") routedFile = "server.log";
+    if (!routedFile.empty() && routedFile != primaryFileName_)
     {
-        stream_ << formatted;
-        stream_.flush();
+        auto it = subsystemStreams_.find(routedFile);
+        if (it == subsystemStreams_.end())
+        {
+            const auto targetPath = path_.parent_path() / routedFile;
+            std::ofstream target(targetPath, std::ios::app);
+            it = subsystemStreams_.emplace(routedFile, std::move(target)).first;
+        }
+        output = &it->second;
+    }
+    if (output->is_open())
+    {
+        *output << formatted;
+        output->flush();
     }
 #ifdef _WIN32
     ::OutputDebugStringA(formatted.c_str());

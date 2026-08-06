@@ -45,7 +45,7 @@ void OVPlaybackManager::PushMono(const std::vector<std::int16_t>& pcm, float gai
     }
     if (queue_.size() - readOffset_ > SAMPLE_RATE * 2 * 2) readOffset_ = queue_.size() - SAMPLE_RATE * 2 * 2;
 }
-BassDword OVPlaybackManager::OnStream(BassHandle, void* buffer, BassDword length, void* user)
+BassDword OV_BASS_CALL OVPlaybackManager::OnStream(BassHandle, void* buffer, BassDword length, void* user)
 {
     auto* playback = static_cast<OVPlaybackManager*>(user);
     if (!playback || !buffer || length == 0) return 0;

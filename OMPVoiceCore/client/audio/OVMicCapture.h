@@ -25,7 +25,7 @@ public:
     [[nodiscard]] float Peak() const noexcept { return peak_; }
 
 private:
-    static int OnRecord(BassHandle handle, const void* buffer, BassDword length, void* user);
+    static int OV_BASS_CALL OnRecord(BassHandle handle, const void* buffer, BassDword length, void* user);
     OVBassApi& bass_;
     FrameQueue frames_{32};
     BassHandle recordHandle_{};

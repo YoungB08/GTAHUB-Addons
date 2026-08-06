@@ -13,6 +13,7 @@
 #include "shared/OVThreadQueue.h"
 
 #include <atomic>
+#include <chrono>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -33,30 +34,39 @@ public:
     void StopCapture();
     void SetMasterVolume(float volume);
     void SetMicrophoneVolume(float volume);
+    bool SetInputDevice(int device);
     void EnableSmoothing(bool enable) noexcept { smoothing_ = enable; }
     void EnableHighPass(bool enable) noexcept { highPassEnabled_ = enable; }
     void EnableNoiseSuppression(bool enable) noexcept { noiseSuppressionEnabled_ = enable; }
     void EnableAGC(bool enable) noexcept { agc_.SetEnabled(enable); }
     void SetTransmitting(bool transmitting) noexcept { transmitting_ = transmitting; }
     void SetLoopback(bool enabled) noexcept { loopback_ = enabled; }
+    void SetVoiceActivation(bool enabled, float threshold) noexcept { voiceActivationEnabled_ = enabled; voiceActivationThreshold_ = threshold; }
     void SetFrameHandler(EncodedFrameHandler handler);
     void OnRemoteFrame(VoiceFrame frame);
     void Update();
     [[nodiscard]] bool IsCapturing() const noexcept { return capture_.IsCapturing(); }
     [[nodiscard]] float MicRms() const noexcept { return capture_.Rms(); }
     [[nodiscard]] float MicPeak() const noexcept { return capture_.Peak(); }
-    [[nodiscard]] std::size_t RemoteStreamCount() const noexcept { return remoteStreams_.size(); }
+    [[nodiscard]] std::size_t RemoteStreamCount() const noexcept { return remoteStreamCount_.load(); }
 
 private:
     struct RemoteStream
     {
         OVJitterBuffer jitter;
         OVOpusDecoder decoder;
+        OVHighPassFilter effectHighPass{300.0F};
+        float lowPassState{};
+        float gain{1.0F};
+        float pan{};
+        VoiceMode mode{VoiceMode::Proximity};
+        std::chrono::steady_clock::time_point lastPacket{};
         bool initialized{};
     };
     void ProcessLoop();
     void ProcessCapture();
     void ProcessRemote();
+    static void ApplyModeEffect(RemoteStream& stream, std::vector<std::int16_t>& pcm);
     OVBassApi& bass_;
     OVMicCapture capture_;
     OVOpusEncoder encoder_;
@@ -67,6 +77,7 @@ private:
     OVAutomaticGain agc_;
     ThreadQueue<VoiceFrame> remoteQueue_{128};
     std::unordered_map<int, RemoteStream> remoteStreams_;
+    std::atomic_size_t remoteStreamCount_{};
     std::vector<std::int16_t> captureBuffer_;
     EncodedFrameHandler frameHandler_;
     std::mutex handlerMutex_;
@@ -79,5 +90,11 @@ private:
     bool highPassEnabled_{true};
     bool noiseSuppressionEnabled_{true};
     float microphoneVolume_{1.0F};
+    int inputDevice_{-1};
+    bool voiceActivationEnabled_{};
+    float voiceActivationThreshold_{0.15F};
+    int activationFrames_{};
+    int releaseFrames_{};
+    bool voiceActive_{};
 };
 }

@@ -64,6 +64,7 @@ void OVDx9Renderer::OnEndScene(IDirect3DDevice9* device)
     if (!Initialize(device)) return;
     D3DVIEWPORT9 viewport{}; device_->GetViewport(&viewport);
     const bool transmitting = audio_.IsCapturing();
+    if (fakeRemote_) speakers_.Submit(SpeakerState{999, static_cast<float>(viewport.Width) * 0.5F, static_cast<float>(viewport.Height) * 0.42F, true, 5.0F});
     hud_.Render(device_, resources_.Get(transmitting ? "micro_active.png" : "micro_passive.png"), static_cast<float>(viewport.Width), static_cast<float>(viewport.Height), transmitting, false, 0.0F);
     speakers_.Render(device_, resources_.Get("speaker.png"));
     ImGui_ImplDX9_NewFrame();

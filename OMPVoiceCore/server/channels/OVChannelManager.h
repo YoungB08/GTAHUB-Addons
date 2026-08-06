@@ -30,6 +30,7 @@ struct VoiceRecipient
     int playerId{};
     float gain{1.0F};
     float pan{};
+    VoiceMode mode{VoiceMode::Proximity};
 };
 
 class OVChannelManager final

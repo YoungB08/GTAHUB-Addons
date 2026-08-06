@@ -4,8 +4,10 @@
 #include "debug/OVDiagnostic.h"
 #include "hooks/OVGameHooks.h"
 #include "network/OVNetworkClient.h"
+#include "debug/OVPacketSimulator.h"
 #include "render/OVDx9Renderer.h"
 #include "shared/OVLogger.h"
+#include "shared/OVCrashSafety.h"
 
 #include <Windows.h>
 
@@ -22,10 +24,12 @@ public:
     bool Initialize()
     {
         Logger::Instance().Initialize(std::filesystem::path("ompvoice") / "logs", "client.log", "Client");
+        CrashSafety::Install(std::filesystem::path("ompvoice") / "debug");
         config_.Load();
         hooks_.Initialize();
         diagnostic_ = std::make_unique<OVDiagnostic>();
         renderer_ = std::make_unique<OVDx9Renderer>(config_, audio_, bass_, *diagnostic_);
+        hooks_.InstallDx9Hooks(renderer_.get());
         audio_.SetFrameHandler([this](std::vector<std::uint8_t> encoded) {
             VoiceFrame frame;
             frame.playerId = playerId_;
@@ -33,12 +37,24 @@ public:
             frame.sequence = sequence_++;
             frame.timestampMs = static_cast<std::uint32_t>(GetTickCount());
             frame.encoded = std::move(encoded);
+            simulator_.SetPacketLoss(config_.Values().debug.packetLoss);
+            if (simulator_.Drop()) return;
+            if (config_.Values().debug.mirrorMode)
+            {
+                VoiceFrame mirror = frame;
+                mirror.playerId = 999;
+                audio_.OnRemoteFrame(std::move(mirror));
+            }
             network_.SendVoiceFrame(std::move(frame));
         });
         network_.Configure("127.0.0.1", OMPVOICE_PORT, playerId_);
         network_.SetFrameHandler([this](VoiceFrame frame) { audio_.OnRemoteFrame(std::move(frame)); });
         network_.Start();
-        audio_.Initialize();
+        if (audio_.Initialize())
+        {
+            audio_.SetInputDevice(config_.Values().microphone.device);
+            audio_.StartCapture();
+        }
         running_ = true;
         worker_ = std::thread(&ClientRuntime::Loop, this);
         OV_LOG_INFO("Component", "ov_client.asi initialized for SA:MP 0.3.DL R1/open.mp");
@@ -54,6 +70,7 @@ public:
         renderer_.reset();
         config_.Save();
         Logger::Instance().Shutdown();
+        CrashSafety::Uninstall();
     }
 
 private:
@@ -73,6 +90,8 @@ private:
                 if (transmitting) network_.SendVoiceBegin(1); else network_.SendVoiceEnd();
             }
             audio_.SetLoopback(hooks_.LoopbackToggled() || config_.Values().debug.loopback);
+            audio_.SetVoiceActivation(config_.Values().sound.voiceActivation, config_.Values().sound.voiceThreshold);
+            if (renderer_) renderer_->SetFakeRemote(hooks_.FakeRemoteToggled() || config_.Values().debug.fakeRemote);
             audio_.SetMicrophoneVolume(config_.Values().microphone.gain);
             audio_.Update();
             hooks_.ClearEdgeEvents();
@@ -89,6 +108,7 @@ private:
     OVBassApi bass_;
     OVAudioEngine audio_{bass_};
     OVNetworkClient network_;
+    OVPacketSimulator simulator_;
     OVGameHooks hooks_;
     std::unique_ptr<OVDiagnostic> diagnostic_;
     std::unique_ptr<OVDx9Renderer> renderer_;

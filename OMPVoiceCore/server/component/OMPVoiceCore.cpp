@@ -2,6 +2,7 @@
 
 #include "server/natives/OVPawnNatives.h"
 #include "shared/OVConstants.h"
+#include "shared/OVCrashSafety.h"
 #include "shared/OVLogger.h"
 
 #include <Server/Components/Pawn/pawn.hpp>
@@ -34,6 +35,7 @@ OMPVoiceCore::~OMPVoiceCore()
     }
     if (pawn_) pawn_->getEventDispatcher().removeEventHandler(this);
     ov::Logger::Instance().Shutdown();
+    ov::CrashSafety::Uninstall();
 }
 
 StringView OMPVoiceCore::componentName() const { return "OMPVoiceCore"; }
@@ -42,6 +44,7 @@ SemanticVersion OMPVoiceCore::componentVersion() const { return SemanticVersion(
 void OMPVoiceCore::onLoad(ICore* core)
 {
     core_ = core;
+    ov::CrashSafety::Install(std::filesystem::path("ompvoice") / "debug");
     ov::Logger::Instance().Initialize(std::filesystem::path("ompvoice") / "logs", "server.log", "Server");
     OV_LOG_INFO("Component", "OMPVoiceCore loading; voice port is %u", ov::OMPVOICE_PORT);
     core_->getEventDispatcher().addEventHandler(this);

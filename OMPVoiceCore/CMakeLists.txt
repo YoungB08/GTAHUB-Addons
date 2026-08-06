@@ -38,6 +38,7 @@ endif()
 
 add_library(ov_shared STATIC
     shared/OVConfig.cpp
+    shared/OVCrashSafety.cpp
     shared/OVLogger.cpp
     shared/OVPacket.cpp)
 target_include_directories(ov_shared PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -111,3 +112,35 @@ endif()
 if(BUILD_TESTING AND OV_BUILD_TESTS)
     add_subdirectory(tests)
 endif()
+
+set(OV_PACKAGE_DIR "${CMAKE_BINARY_DIR}/package")
+set(OV_PACKAGE_DEPENDS)
+if(TARGET ompvoice_server)
+    list(APPEND OV_PACKAGE_DEPENDS ompvoice_server)
+endif()
+if(TARGET ov_client)
+    list(APPEND OV_PACKAGE_DEPENDS ov_client)
+endif()
+set(OV_PACKAGE_ARTIFACT_COMMANDS)
+if(TARGET ompvoice_server)
+    list(APPEND OV_PACKAGE_ARTIFACT_COMMANDS
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:ompvoice_server>" "${OV_PACKAGE_DIR}/plugins/ompvoice.dll")
+endif()
+if(TARGET ov_client)
+    list(APPEND OV_PACKAGE_ARTIFACT_COMMANDS
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:ov_client>" "${OV_PACKAGE_DIR}/ompvoice/ov_client.asi")
+endif()
+add_custom_target(ompvoice_package ALL
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${OV_PACKAGE_DIR}/plugins"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${OV_PACKAGE_DIR}/ompvoice/resources"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${OV_PACKAGE_DIR}/ompvoice/logs"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${OV_PACKAGE_DIR}/ompvoice/records"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${OV_PACKAGE_DIR}/ompvoice/debug"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/config/config.json" "${OV_PACKAGE_DIR}/ompvoice/config.json"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/client/resources" "${OV_PACKAGE_DIR}/ompvoice/resources"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/pawno/include/ompvoice.inc" "${OV_PACKAGE_DIR}/ompvoice/ompvoice.inc"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/README.md" "${OV_PACKAGE_DIR}/README.md"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/INSTALL.md" "${OV_PACKAGE_DIR}/INSTALL.md"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/CHANGELOG.md" "${OV_PACKAGE_DIR}/CHANGELOG.md"
+    ${OV_PACKAGE_ARTIFACT_COMMANDS}
+    DEPENDS ${OV_PACKAGE_DEPENDS})

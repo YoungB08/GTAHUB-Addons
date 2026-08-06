@@ -24,7 +24,7 @@ void OVMicCapture::Stop()
 }
 std::optional<std::vector<std::int16_t>> OVMicCapture::PopFrame() { return frames_.TryPop(); }
 
-int OVMicCapture::OnRecord(BassHandle, const void* buffer, BassDword length, void* user)
+int OV_BASS_CALL OVMicCapture::OnRecord(BassHandle, const void* buffer, BassDword length, void* user)
 {
     auto* capture = static_cast<OVMicCapture*>(user);
     if (!capture || !buffer || length < sizeof(std::int16_t)) return 1;

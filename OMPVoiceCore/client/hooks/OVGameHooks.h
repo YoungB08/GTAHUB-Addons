@@ -5,10 +5,12 @@
 
 namespace ov::client
 {
+class OVDx9Renderer;
 class OVGameHooks final
 {
 public:
     bool Initialize();
+    bool InstallDx9Hooks(OVDx9Renderer* renderer);
     void Shutdown();
     [[nodiscard]] bool IsSupportedClient() const noexcept { return supported_; }
     [[nodiscard]] bool IsKeyDown(int virtualKey) const noexcept;
@@ -22,6 +24,7 @@ public:
 
 private:
     bool supported_{};
+    bool dx9Hooked_{};
     bool settingsPressed_{};
     bool debugPressed_{};
     bool loopbackToggled_{};

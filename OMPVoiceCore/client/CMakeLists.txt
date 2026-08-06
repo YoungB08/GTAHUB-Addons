@@ -43,7 +43,7 @@ target_include_directories(ov_client PRIVATE
     "${OV_IMGUI_DIR}"
     "${OV_IMGUI_DIR}/backends"
     "${minhook_SOURCE_DIR}/include")
-target_link_libraries(ov_client PRIVATE ov_shared opus imgui d3d9 dxguid winmm ws2_32)
+target_link_libraries(ov_client PRIVATE ov_shared opus imgui d3d9 dxguid winmm ws2_32 psapi)
 if(TARGET minhook)
     target_link_libraries(ov_client PRIVATE minhook)
 endif()

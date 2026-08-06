@@ -22,7 +22,7 @@ void OVMicCapture::Stop()
 {
     if (recordHandle_ != 0 && highPassFx_ != 0) bass_.RemoveFx(recordHandle_, highPassFx_);
     highPassFx_ = 0;
-    if (recordHandle_ != 0) bass_.ChannelFree(recordHandle_);
+    if (recordHandle_ != 0) bass_.ChannelStop(recordHandle_);
     recordHandle_ = 0;
     bass_.FreeRecord();
 }

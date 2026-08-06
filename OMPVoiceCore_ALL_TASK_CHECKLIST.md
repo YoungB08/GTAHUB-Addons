@@ -675,8 +675,8 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 - [x] Client connect/disconnect 100 times
 - [x] Open/close settings 100 times
-- [ ] Start/stop capture 100 times
-- [ ] No growing memory usage
+- [x] Start/stop capture 100 times
+- [x] No growing memory usage
 
 ---
 
@@ -781,7 +781,7 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ### Audio
 
-- [ ] Capture works
+- [x] Capture works
 - [x] Encode works
 - [x] Decode works
 - [x] Effects work

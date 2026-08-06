@@ -75,9 +75,9 @@ if(BUILD_TESTING)
     target_include_directories(ov_client_audio_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/..")
     target_link_libraries(ov_client_audio_tests PRIVATE opus ov_shared)
     add_test(NAME ov_client_audio_tests COMMAND ov_client_audio_tests)
-    add_executable(ov_bass_runtime_tests tests/OVBassRuntimeTests.cpp audio/OVBassApi.cpp)
+    add_executable(ov_bass_runtime_tests tests/OVBassRuntimeTests.cpp audio/OVBassApi.cpp audio/OVMicCapture.cpp)
     target_include_directories(ov_bass_runtime_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/..")
-    target_link_libraries(ov_bass_runtime_tests PRIVATE ov_shared "${OV_BASS_ROOT}/c/bass.lib" "${OV_BASS_FX_ROOT}/C/bass_fx.lib")
+    target_link_libraries(ov_bass_runtime_tests PRIVATE ov_shared psapi "${OV_BASS_ROOT}/c/bass.lib" "${OV_BASS_FX_ROOT}/C/bass_fx.lib")
     add_custom_command(TARGET ov_bass_runtime_tests POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${OV_BASS_ROOT}/bass.dll" "$<TARGET_FILE_DIR:ov_bass_runtime_tests>/bass.dll"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${OV_BASS_FX_ROOT}/bass_fx.dll" "$<TARGET_FILE_DIR:ov_bass_runtime_tests>/bass_fx.dll")

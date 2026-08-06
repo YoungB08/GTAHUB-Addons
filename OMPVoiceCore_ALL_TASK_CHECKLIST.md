@@ -674,7 +674,7 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 ## Leak checks
 
 - [x] Client connect/disconnect 100 times
-- [ ] Open/close settings 100 times
+- [x] Open/close settings 100 times
 - [ ] Start/stop capture 100 times
 - [ ] No growing memory usage
 

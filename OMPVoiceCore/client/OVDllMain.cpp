@@ -56,8 +56,12 @@ public:
         network_.Start();
         if (audio_.Initialize())
         {
-            audio_.SetInputDevice(config_.Values().microphone.device);
-            audio_.StartCapture();
+            if (!audio_.SetInputDevice(config_.Values().microphone.device))
+            {
+                OV_LOG_WARN("Audio", "Configured input device is unavailable; using the default device");
+                config_.Values().microphone.device = -1;
+            }
+            if (!audio_.StartCapture()) OV_LOG_ERROR("Audio", "Microphone capture could not be started");
         }
         running_ = true;
         worker_ = std::thread(&ClientRuntime::Loop, this);

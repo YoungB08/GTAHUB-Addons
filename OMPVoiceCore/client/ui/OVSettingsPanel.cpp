@@ -48,10 +48,19 @@ void OVSettingsPanel::Render(OVClientConfig& config, OVAudioEngine& audio, OVBas
             const char* currentDevice = values.microphone.device >= 0 && static_cast<std::size_t>(values.microphone.device) < devices.size() ? devices[values.microphone.device].c_str() : "Default device";
             if (ImGui::BeginCombo("Input device", currentDevice))
             {
-                if (ImGui::Selectable("Default device", values.microphone.device == -1)) { values.microphone.device = -1; audio.SetInputDevice(-1); changed = true; }
+                if (ImGui::Selectable("Default device", values.microphone.device == -1) && audio.SetInputDevice(-1))
+                {
+                    values.microphone.device = -1;
+                    changed = true;
+                }
                 for (std::size_t index = 0; index < devices.size(); ++index)
                 {
-                    if (ImGui::Selectable(devices[index].c_str(), values.microphone.device == static_cast<int>(index))) { values.microphone.device = static_cast<int>(index); audio.SetInputDevice(static_cast<int>(index)); changed = true; }
+                    if (ImGui::Selectable(devices[index].c_str(), values.microphone.device == static_cast<int>(index)) &&
+                        audio.SetInputDevice(static_cast<int>(index)))
+                    {
+                        values.microphone.device = static_cast<int>(index);
+                        changed = true;
+                    }
                 }
                 ImGui::EndCombo();
             }

@@ -56,6 +56,8 @@ void OVAudioEngine::EnableHighPass(bool enable) noexcept { highPassEnabled_ = en
 void OVAudioEngine::SetMicrophoneVolume(float volume) { microphoneVolume_ = std::clamp(volume, 0.0F, 2.0F); }
 bool OVAudioEngine::SetInputDevice(int device)
 {
+    if (device < -1 || (device >= 0 && static_cast<std::size_t>(device) >= bass_.RecordDevices().size()))
+        return false;
     if (device == inputDevice_) return true;
     const int previousDevice = inputDevice_;
     if (!capture_.IsCapturing())

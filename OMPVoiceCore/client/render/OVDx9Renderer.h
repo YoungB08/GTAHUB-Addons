@@ -17,6 +17,7 @@ class OVAudioEngine;
 class OVBassApi;
 class OVDiagnostic;
 class OVSettingsPanel;
+enum class SettingsTab;
 class OVFakeRemote;
 
 class OVDx9Renderer final
@@ -32,6 +33,8 @@ public:
     void ToggleSettings() noexcept;
     void SetOverlayVisible(bool visible) noexcept;
     void SetFakeRemote(bool enabled) noexcept { fakeRemote_ = enabled; }
+    void SelectSettingsTab(SettingsTab tab) noexcept;
+    [[nodiscard]] SettingsTab LastRenderedSettingsTab() const noexcept;
     [[nodiscard]] bool IsInitialized() const noexcept { return initialized_; }
 
 private:

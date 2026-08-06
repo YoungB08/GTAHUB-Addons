@@ -12,10 +12,14 @@ constexpr DWORD FVF = D3DFVF_XYZRHW | D3DFVF_TEX1;
 void OVHudIcon::Render(IDirect3DDevice9* device, IDirect3DTexture9* texture, float width, float height, bool talking, bool muted, float pulse)
 {
     if (!visible_ || !device || !texture) return;
-    const float size = 64.0F * std::clamp(scale_, 0.25F, 3.0F) * (talking ? 1.0F + pulse * 0.08F : 1.0F);
-    const float x = (width - size) * 0.5F + offsetX_;
+    D3DSURFACE_DESC description{};
+    texture->GetLevelDesc(0, &description);
+    const float aspect = description.Height > 0 ? static_cast<float>(description.Width) / description.Height : 1.0F;
+    const float iconHeight = 64.0F * std::clamp(scale_, 0.25F, 3.0F) * (talking ? 1.0F + pulse * 0.08F : 1.0F);
+    const float iconWidth = std::min(width * 0.8F, iconHeight * aspect);
+    const float x = (width - iconWidth) * 0.5F + offsetX_;
     const float y = (height - 140.0F) + offsetY_;
-    Vertex vertices[] = {{x - 0.5F, y - 0.5F, 0, 1, 0, 0}, {x + size - 0.5F, y - 0.5F, 0, 1, 1, 0}, {x + size - 0.5F, y + size - 0.5F, 0, 1, 1, 1}, {x - 0.5F, y + size - 0.5F, 0, 1, 0, 1}};
+    Vertex vertices[] = {{x - 0.5F, y - 0.5F, 0, 1, 0, 0}, {x + iconWidth - 0.5F, y - 0.5F, 0, 1, 1, 0}, {x + iconWidth - 0.5F, y + iconHeight - 0.5F, 0, 1, 1, 1}, {x - 0.5F, y + iconHeight - 0.5F, 0, 1, 0, 1}};
     IDirect3DStateBlock9* state = nullptr;
     if (SUCCEEDED(device->CreateStateBlock(D3DSBT_ALL, &state))) state->Capture();
     device->SetTexture(0, texture);

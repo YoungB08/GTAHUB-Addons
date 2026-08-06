@@ -71,7 +71,7 @@ void OVAudioEngine::ProcessLoop()
     {
         ProcessCapture();
         ProcessRemote();
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
 }
 void OVAudioEngine::ProcessCapture()
@@ -95,6 +95,7 @@ bool OVAudioEngine::InjectDebugCaptureFrame(std::vector<std::int16_t> pcm)
 
 bool OVAudioEngine::ProcessCaptureFrame(std::vector<std::int16_t> pcm)
 {
+    if (!transmitting_.load(std::memory_order_relaxed) && !voiceActivationEnabled_ && !loopback_) return false;
     for (auto& sample : pcm) sample = static_cast<std::int16_t>(std::clamp(static_cast<float>(sample) * microphoneVolume_, -32768.0F, 32767.0F));
     if (highPassEnabled_ && !capture_.HasBassHighPass()) highPass_.Process(pcm);
     if (noiseSuppressionEnabled_) noiseGate_.Process(pcm);

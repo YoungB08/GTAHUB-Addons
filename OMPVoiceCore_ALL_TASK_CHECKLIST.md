@@ -789,15 +789,15 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ### UI
 
-- [ ] All tabs functional
-- [ ] No ImGui crashes
+- [x] All tabs functional
+- [x] No ImGui crashes
 - [x] Settings persist
 
 ### Render
 
-- [ ] HUD icon correct
-- [ ] Speaker icon correct
-- [ ] No DX9 device leaks
+- [x] HUD icon correct
+- [x] Speaker icon correct
+- [x] No DX9 device leaks
 
 ### Self-debug
 
@@ -812,8 +812,8 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 - [ ] No crash after 1 hour idle
 - [ ] No crash after 1 hour voice spam
-- [ ] No memory leaks detected
-- [ ] No handle leaks detected
+- [x] No memory leaks detected
+- [x] No handle leaks detected
 
 ---
 
@@ -845,4 +845,4 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 - [ ] Tất cả mục **TESTED**
 - [ ] Tất cả mục **VERIFIED**
 - [ ] Không còn crash hoặc memory leak
-- [ ] Có thể debug hoàn toàn với **1 client duy nhất**
+- [x] Có thể debug hoàn toàn với **1 client duy nhất**

@@ -17,10 +17,12 @@ void OVSettingsPanel::Render(OVClientConfig& config, OVAudioEngine& audio, OVBas
     if (!ImGui::Begin("OMPVoice Settings", &open_, ImGuiWindowFlags_AlwaysAutoResize)) { ImGui::End(); return; }
     auto& values = config.Values();
     bool changed = false;
+    lastRenderedTab_ = SettingsTab::None;
     if (ImGui::BeginTabBar("voice_tabs"))
     {
-        if (ImGui::BeginTabItem("General"))
+        if (ImGui::BeginTabItem("General", nullptr, selectedTab_ == SettingsTab::General ? ImGuiTabItemFlags_SetSelected : 0))
         {
+            lastRenderedTab_ = SettingsTab::General;
             changed |= ImGui::Checkbox("Turn on sound", &values.sound.enabled);
             int volume = values.sound.masterVolume;
             if (ImGui::SliderInt("Sound volume", &volume, 0, 100)) { values.sound.masterVolume = volume; audio.SetMasterVolume(volume / 100.0F); changed = true; }
@@ -38,8 +40,9 @@ void OVSettingsPanel::Render(OVClientConfig& config, OVAudioEngine& audio, OVBas
             changed |= ImGui::SliderFloat("Speaker icon Y offset", &values.speakerIcon.offsetY, -300.0F, 300.0F);
             ImGui::EndTabItem();
         }
-        if (ImGui::BeginTabItem("Microphone"))
+        if (ImGui::BeginTabItem("Microphone", nullptr, selectedTab_ == SettingsTab::Microphone ? ImGuiTabItemFlags_SetSelected : 0))
         {
+            lastRenderedTab_ = SettingsTab::Microphone;
             changed |= ImGui::Checkbox("Enable microphone", &values.microphone.enabled);
             const auto devices = bass.RecordDevices();
             const char* currentDevice = values.microphone.device >= 0 && static_cast<std::size_t>(values.microphone.device) < devices.size() ? devices[values.microphone.device].c_str() : "Default device";
@@ -63,8 +66,9 @@ void OVSettingsPanel::Render(OVClientConfig& config, OVAudioEngine& audio, OVBas
             changed |= ImGui::SliderFloat("HUD Y offset", &values.microphoneIcon.offsetY, -300.0F, 300.0F);
             ImGui::EndTabItem();
         }
-        if (ImGui::BeginTabItem("Black list"))
+        if (ImGui::BeginTabItem("Black list", nullptr, selectedTab_ == SettingsTab::Blacklist ? ImGuiTabItemFlags_SetSelected : 0))
         {
+            lastRenderedTab_ = SettingsTab::Blacklist;
             ImGui::InputText("Search player", blacklistSearch_, sizeof(blacklistSearch_));
             const auto onlinePlayers = audio.RemotePlayerIds();
             for (const int playerId : onlinePlayers)
@@ -79,8 +83,9 @@ void OVSettingsPanel::Render(OVClientConfig& config, OVAudioEngine& audio, OVBas
             }
             ImGui::EndTabItem();
         }
-        if (ImGui::BeginTabItem("Debug"))
+        if (ImGui::BeginTabItem("Debug", nullptr, selectedTab_ == SettingsTab::Debug ? ImGuiTabItemFlags_SetSelected : 0))
         {
+            lastRenderedTab_ = SettingsTab::Debug;
             changed |= ImGui::Checkbox("Self loopback", &values.debug.loopback);
             changed |= ImGui::Checkbox("Voice mirror mode", &values.debug.mirrorMode);
             changed |= ImGui::Checkbox("Fake remote player", &values.debug.fakeRemote);
@@ -93,6 +98,7 @@ void OVSettingsPanel::Render(OVClientConfig& config, OVAudioEngine& audio, OVBas
         }
         ImGui::EndTabBar();
     }
+    selectedTab_ = SettingsTab::None;
     if (changed) config.MarkDirty();
     config.FlushIfDue();
     if (ImGui::Button("Save JSON")) config.Save();

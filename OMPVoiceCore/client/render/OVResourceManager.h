@@ -6,6 +6,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace ov::client
 {
@@ -21,6 +22,7 @@ public:
     bool ReloadTextures();
     [[nodiscard]] IDirect3DTexture9* Get(const std::string& name) const;
     [[nodiscard]] bool IsLoaded(const std::string& name) const;
+    [[nodiscard]] bool IsFallback(const std::string& name) const { return fallbacks_.count(name) != 0; }
     [[nodiscard]] const std::filesystem::path& Directory() const noexcept { return directory_; }
 
 private:
@@ -29,5 +31,6 @@ private:
     IDirect3DDevice9* device_{};
     std::filesystem::path directory_;
     std::unordered_map<std::string, TextureHandle> textures_;
+    std::unordered_set<std::string> fallbacks_;
 };
 }

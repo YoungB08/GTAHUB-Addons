@@ -3,16 +3,17 @@
 #include "shared/OVLogger.h"
 
 #include <Windows.h>
+#include <wincodec.h>
 
 namespace ov::client
 {
 namespace
 {
-using CreateTextureFromFileFn = HRESULT(WINAPI*)(LPDIRECT3DDEVICE9, LPCSTR, LPDIRECT3DTEXTURE9*);
-CreateTextureFromFileFn FindTextureLoader()
+template <typename T>
+void ReleaseCom(T*& value)
 {
-    static HMODULE module = LoadLibraryA("d3dx9_43.dll");
-    return module ? reinterpret_cast<CreateTextureFromFileFn>(GetProcAddress(module, "D3DXCreateTextureFromFileA")) : nullptr;
+    if (value) value->Release();
+    value = nullptr;
 }
 }
 
@@ -25,7 +26,7 @@ bool OVResourceManager::Initialize(IDirect3DDevice9* device, std::filesystem::pa
     std::filesystem::create_directories(directory_, error);
     return device_ != nullptr;
 }
-void OVResourceManager::ReleaseAllTextures() { textures_.clear(); }
+void OVResourceManager::ReleaseAllTextures() { textures_.clear(); fallbacks_.clear(); }
 bool OVResourceManager::ReloadTextures()
 {
     ReleaseAllTextures();
@@ -42,14 +43,45 @@ IDirect3DTexture9* OVResourceManager::Get(const std::string& name) const
 bool OVResourceManager::IsLoaded(const std::string& name) const { return Get(name) != nullptr; }
 bool OVResourceManager::LoadTexture(const std::string& name)
 {
-    const auto path = (directory_ / name).string();
+    const auto path = directory_ / name;
+    const HRESULT comResult = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    const bool uninitializeCom = comResult == S_OK || comResult == S_FALSE;
+    IWICImagingFactory* factory = nullptr;
+    IWICBitmapDecoder* decoder = nullptr;
+    IWICBitmapFrameDecode* frame = nullptr;
+    IWICFormatConverter* converter = nullptr;
     IDirect3DTexture9* texture = nullptr;
-    if (const auto loader = FindTextureLoader(); loader && SUCCEEDED(loader(device_, path.c_str(), &texture)))
+    HRESULT result = CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&factory));
+    if (SUCCEEDED(result)) result = factory->CreateDecoderFromFilename(path.c_str(), nullptr, GENERIC_READ, WICDecodeMetadataCacheOnLoad, &decoder);
+    if (SUCCEEDED(result)) result = decoder->GetFrame(0, &frame);
+    if (SUCCEEDED(result)) result = factory->CreateFormatConverter(&converter);
+    if (SUCCEEDED(result)) result = converter->Initialize(frame, GUID_WICPixelFormat32bppBGRA, WICBitmapDitherTypeNone, nullptr, 0.0, WICBitmapPaletteTypeCustom);
+    UINT width{}, height{};
+    if (SUCCEEDED(result)) result = converter->GetSize(&width, &height);
+    if (SUCCEEDED(result) && width > 0 && height > 0)
+    {
+        result = device_->CreateTexture(width, height, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &texture, nullptr);
+        D3DLOCKED_RECT locked{};
+        if (SUCCEEDED(result)) result = texture->LockRect(0, &locked, nullptr, 0);
+        if (SUCCEEDED(result))
+        {
+            result = converter->CopyPixels(nullptr, width * 4U, locked.Pitch * height, static_cast<BYTE*>(locked.pBits));
+            texture->UnlockRect(0);
+        }
+    }
+    ReleaseCom(converter);
+    ReleaseCom(frame);
+    ReleaseCom(decoder);
+    ReleaseCom(factory);
+    if (uninitializeCom) CoUninitialize();
+    if (SUCCEEDED(result) && texture)
     {
         textures_[name] = TextureHandle(texture);
+        fallbacks_.erase(name);
         return true;
     }
-    OV_LOG_WARN("Render", "Missing or unsupported texture %s; fallback generated", path.c_str());
+    if (texture) texture->Release();
+    OV_LOG_WARN("Render", "Missing or unsupported texture %s; fallback generated", path.string().c_str());
     return CreateFallback(name);
 }
 bool OVResourceManager::CreateFallback(const std::string& name)
@@ -62,6 +94,7 @@ bool OVResourceManager::CreateFallback(const std::string& name)
     for (int y = 0; y < 64; ++y) for (int x = 0; x < 64; ++x) static_cast<DWORD*>(locked.pBits)[y * locked.Pitch / 4 + x] = (x > 2 && x < 61 && y > 2 && y < 61) ? color : 0;
     texture->UnlockRect(0);
     textures_[name] = TextureHandle(texture);
+    fallbacks_.insert(name);
     return true;
 }
 }

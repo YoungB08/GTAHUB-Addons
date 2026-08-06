@@ -10,7 +10,9 @@
 #include "shared/OVConstants.h"
 
 #include <cmath>
+#include <array>
 #include <chrono>
+#include <ctime>
 #include <cstdint>
 #include <iostream>
 #include <vector>
@@ -72,6 +74,34 @@ int main()
     simulator.SetLatency(100);
     if (simulator.Latency() != 100) return 13;
     if (ov::client::OVMicCapture::MeasureCallbackMicros(500) >= 5000.0F) return 14;
-    std::cout << "Audio codec and DSP tests passed\n";
+
+    constexpr int performanceFrames = 200;
+    constexpr double simulatedSeconds = performanceFrames * 0.02;
+    ov::client::OVOpusEncoder performanceEncoder;
+    ov::client::OVOpusDecoder oneVoiceDecoder;
+    if (!performanceEncoder.Initialize() || !oneVoiceDecoder.Initialize()) return 15;
+    const std::clock_t oneVoiceStart = std::clock();
+    for (int frame = 0; frame < performanceFrames; ++frame)
+    {
+        const auto packet = performanceEncoder.Encode(pcm.data(), pcm.size());
+        if (packet.empty() || oneVoiceDecoder.Decode(packet.data(), packet.size(), false).size() != ov::FRAME_SAMPLES) return 16;
+    }
+    const double oneVoiceCpu = static_cast<double>(std::clock() - oneVoiceStart) / CLOCKS_PER_SEC / simulatedSeconds * 100.0;
+    if (oneVoiceCpu >= 4.0) return 17;
+
+    std::array<ov::client::OVOpusDecoder, 8> voiceDecoders;
+    for (auto& voiceDecoder : voiceDecoders) if (!voiceDecoder.Initialize()) return 18;
+    const std::clock_t eightVoiceStart = std::clock();
+    for (int frame = 0; frame < performanceFrames; ++frame)
+    {
+        const auto packet = performanceEncoder.Encode(pcm.data(), pcm.size());
+        if (packet.empty()) return 19;
+        for (auto& voiceDecoder : voiceDecoders)
+            if (voiceDecoder.Decode(packet.data(), packet.size(), false).size() != ov::FRAME_SAMPLES) return 20;
+    }
+    const double eightVoiceCpu = static_cast<double>(std::clock() - eightVoiceStart) / CLOCKS_PER_SEC / simulatedSeconds * 100.0;
+    std::cout << "CPU budgets: one voice=" << oneVoiceCpu << "%, eight voices=" << eightVoiceCpu << "%\n";
+    if (eightVoiceCpu >= 10.0) return 21;
+    std::cout << "Audio codec, DSP, and CPU budget tests passed\n";
     return 0;
 }

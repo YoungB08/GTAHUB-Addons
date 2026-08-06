@@ -709,9 +709,9 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## CPU
 
-- [ ] Idle < 2%
-- [ ] One active voice < 4%
-- [ ] Eight active voices < 10%
+- [x] Idle < 2%
+- [x] One active voice < 4%
+- [x] Eight active voices < 10%
 
 ## Network
 

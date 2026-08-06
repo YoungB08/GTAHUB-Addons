@@ -113,7 +113,7 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 - [x] PawnManager registration
 - [ ] Native lookup test
-- [ ] Gamemode compile test
+- [x] Gamemode compile test
 
 ---
 

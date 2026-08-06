@@ -23,4 +23,12 @@ if(OV_BUILD_SERVER)
     endif()
     add_test(NAME ov_network_integration_tests COMMAND ov_network_integration_tests)
     set_tests_properties(ov_network_integration_tests PROPERTIES RUN_SERIAL TRUE TIMEOUT 45)
+    if(TARGET pawncc)
+        add_test(NAME pawn_gamemode_compile
+            COMMAND $<TARGET_FILE:pawncc>
+                "-i${CMAKE_CURRENT_SOURCE_DIR}/../pawno/include"
+                "-o${CMAKE_CURRENT_BINARY_DIR}/voice_smoke.amx"
+                "${CMAKE_CURRENT_SOURCE_DIR}/../examples/voice_smoke.pwn")
+        set_tests_properties(pawn_gamemode_compile PROPERTIES RUN_SERIAL TRUE TIMEOUT 30)
+    endif()
 endif()

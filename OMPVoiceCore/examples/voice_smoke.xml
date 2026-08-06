@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<?xml-stylesheet href="file:///D|/GTAHUB-Addons/out/server/bin/xml/pawndoc.xsl" type="text/xsl"?>
+<doc source="D:/GTAHUB-Addons/OMPVoiceCore/tests/../examples/voice_smoke.pwn">
+	<assembly>
+		<name>D:/GTAHUB-Addons/OMPVoiceCore/tests/../examples/voice_smoke.pwn</name>
+	</assembly>
+	<members>
+
+		<!-- enumerations -->
+
+		<!-- constants -->
+		<member name="C:false" value="0">
+			<tagname value="bool"/>
+			<referrer name="main"/>
+		</member>
+		<member name="C:true" value="1">
+			<tagname value="bool"/>
+			<referrer name="main"/>
+		</member>
+
+		<!-- variables -->
+		<member name="F:__date">
+		</member>
+		<member name="F:__file">
+		</member>
+		<member name="F:__file">
+		</member>
+		<member name="F:__time">
+		</member>
+
+		<!-- functions -->
+		<member name="M:OV_CreateChannel" syntax="OV_CreateChannel(distance)">
+			<attribute name="native"/>
+			<referrer name="main"/>
+			<param name="distance">
+				<paraminfo>Float </paraminfo>
+			</param>
+		</member>
+		<member name="M:OV_CreateRadioChannel" syntax="OV_CreateRadioChannel()">
+			<attribute name="native"/>
+			<referrer name="main"/>
+		</member>
+		<member name="M:OV_DestroyChannel" syntax="OV_DestroyChannel(channelid)">
+			<attribute name="native"/>
+			<referrer name="main"/>
+			<param name="channelid">
+			</param>
+		</member>
+		<member name="M:OV_EnableVoice" syntax="OV_EnableVoice(playerid, enable)">
+			<attribute name="native"/>
+			<referrer name="main"/>
+			<param name="playerid">
+			</param>
+			<param name="enable">
+				<paraminfo>bool </paraminfo>
+			</param>
+		</member>
+		<member name="M:OV_EndPhoneCall" syntax="OV_EndPhoneCall(playerid)">
+			<attribute name="native"/>
+			<referrer name="main"/>
+			<param name="playerid">
+			</param>
+		</member>
+		<member name="M:OV_JoinRadioChannel" syntax="OV_JoinRadioChannel(playerid, channelid)">
+			<attribute name="native"/>
+			<referrer name="main"/>
+			<param name="playerid">
+			</param>
+			<param name="channelid">
+			</param>
+		</member>
+		<member name="M:OV_LeaveRadioChannel" syntax="OV_LeaveRadioChannel(playerid, channelid)">
+			<attribute name="native"/>
+			<referrer name="main"/>
+			<param name="playerid">
+			</param>
+			<param name="channelid">
+			</param>
+		</member>
+		<member name="M:OV_SetMuted" syntax="OV_SetMuted(listenerid, targetid, mute)">
+			<attribute name="native"/>
+			<referrer name="main"/>
+			<param name="listenerid">
+			</param>
+			<param name="targetid">
+			</param>
+			<param name="mute">
+				<paraminfo>bool </paraminfo>
+			</param>
+		</member>
+		<member name="M:OV_SetTalkKey" syntax="OV_SetTalkKey(playerid, keyid)">
+			<attribute name="native"/>
+			<referrer name="main"/>
+			<param name="playerid">
+			</param>
+			<param name="keyid">
+			</param>
+		</member>
+		<member name="M:OV_SetVolume" syntax="OV_SetVolume(playerid, volume)">
+			<attribute name="native"/>
+			<referrer name="main"/>
+			<param name="playerid">
+			</param>
+			<param name="volume">
+				<paraminfo>Float </paraminfo>
+			</param>
+		</member>
+		<member name="M:OV_ShowHudIcon" syntax="OV_ShowHudIcon(playerid, show)">
+			<attribute name="native"/>
+			<referrer name="main"/>
+			<param name="playerid">
+			</param>
+			<param name="show">
+				<paraminfo>bool </paraminfo>
+			</param>
+		</member>
+		<member name="M:OV_StartPhoneCall" syntax="OV_StartPhoneCall(playerid, targetid)">
+			<attribute name="native"/>
+			<referrer name="main"/>
+			<param name="playerid">
+			</param>
+			<param name="targetid">
+			</param>
+		</member>
+		<member name="M:main" syntax="main()">
+			<attribute name="entry"/>
+			<stacksize value="6"/>
+			<dependency name="OV_CreateChannel"/>
+			<dependency name="OV_CreateRadioChannel"/>
+			<dependency name="OV_DestroyChannel"/>
+			<dependency name="OV_EnableVoice"/>
+			<dependency name="OV_EndPhoneCall"/>
+			<dependency name="OV_JoinRadioChannel"/>
+			<dependency name="OV_LeaveRadioChannel"/>
+			<dependency name="OV_SetMuted"/>
+			<dependency name="OV_SetTalkKey"/>
+			<dependency name="OV_SetVolume"/>
+			<dependency name="OV_ShowHudIcon"/>
+			<dependency name="OV_StartPhoneCall"/>
+			<dependency name="false"/>
+			<dependency name="true"/>
+		</member>
+
+	</members>
+</doc>

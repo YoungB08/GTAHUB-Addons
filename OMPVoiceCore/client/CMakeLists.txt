@@ -57,6 +57,7 @@ add_custom_command(TARGET ov_client POST_BUILD
 if(BUILD_TESTING)
     add_executable(ov_client_audio_tests
         tests/OVAudioTests.cpp
+        debug/OVPacketSimulator.cpp
         audio/OVOpusEncoder.cpp
         audio/OVOpusDecoder.cpp
         audio/OVJitterBuffer.cpp

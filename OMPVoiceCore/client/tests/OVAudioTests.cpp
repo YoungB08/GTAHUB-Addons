@@ -4,6 +4,7 @@
 #include "audio/OVNoiseGate.h"
 #include "audio/OVOpusDecoder.h"
 #include "audio/OVOpusEncoder.h"
+#include "debug/OVPacketSimulator.h"
 
 #include "shared/OVConstants.h"
 
@@ -62,6 +63,13 @@ int main()
     highPass.Process(pcm);
     ov::client::OVAutomaticGain gain;
     gain.Process(pcm);
+    ov::client::OVPacketSimulator simulator;
+    simulator.SetPacketLoss(0.0F);
+    if (simulator.Drop()) return 11;
+    simulator.SetJitter(25);
+    for (int iteration = 0; iteration < 100; ++iteration) { const int jitterValue = simulator.Jitter(); if (jitterValue < -25 || jitterValue > 25) return 12; }
+    simulator.SetLatency(100);
+    if (simulator.Latency() != 100) return 13;
     std::cout << "Audio codec and DSP tests passed\n";
     return 0;
 }

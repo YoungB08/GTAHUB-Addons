@@ -222,7 +222,7 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 - [x] Default key Z
 - [x] Rebind support
 - [x] Key capture UI
-- [ ] Hold-to-talk stable
+- [x] Hold-to-talk stable
 
 ## State machine
 
@@ -501,10 +501,10 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Render conditions
 
-- [ ] Player transmitting
-- [ ] Not local player
-- [ ] In camera frustum
-- [ ] Distance visible
+- [x] Player transmitting
+- [x] Not local player
+- [x] In camera frustum
+- [x] Distance visible
 
 ## Visuals
 
@@ -735,7 +735,7 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 - [ ] Hold PTT for 10 minutes
 - [ ] ALT+TAB spam 50 times
 - [ ] Change microphone while connected
-- [ ] Disconnect network cable simulation
+- [x] Disconnect network cable simulation
 
 ## Server
 
@@ -804,7 +804,7 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 - [ ] Loopback works
 - [ ] Mirror mode works
 - [ ] Fake remote works
-- [ ] Packet simulator works
+- [x] Packet simulator works
 - [ ] Oscilloscope works
 - [x] Diagnostic report works
 

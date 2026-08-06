@@ -44,11 +44,13 @@ public:
     [[nodiscard]] std::vector<std::string> RecordDevices() const;
     [[nodiscard]] bool IsLoaded() const noexcept { return module_ != nullptr; }
     [[nodiscard]] bool IsFxLoaded() const noexcept { return fxModule_ != nullptr; }
+    [[nodiscard]] const std::string& RuntimeDirectory() const noexcept { return runtimeDirectory_; }
     [[nodiscard]] const std::string& LastError() const noexcept { return lastError_; }
 
 private:
     void* module_{};
     void* fxModule_{};
+    std::string runtimeDirectory_;
     std::string lastError_;
     using InitFn = int (OV_BASS_CALL*)(int, std::uint32_t, std::uint32_t, void*, void*);
     using FreeFn = int (OV_BASS_CALL*)();

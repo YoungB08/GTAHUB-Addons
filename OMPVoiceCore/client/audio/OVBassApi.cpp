@@ -36,7 +36,10 @@ bool OVBassApi::Load(const std::string& directory)
 {
 #ifdef _WIN32
     if (module_) return true;
-    const std::string path = directory.empty() ? "bass.dll" : directory + "\\bass.dll";
+    runtimeDirectory_ = directory;
+    if (runtimeDirectory_.empty() && GetFileAttributesA("ompvoice\\bass.dll") != INVALID_FILE_ATTRIBUTES)
+        runtimeDirectory_ = "ompvoice";
+    const std::string path = runtimeDirectory_.empty() ? "bass.dll" : runtimeDirectory_ + "\\bass.dll";
     module_ = LoadLibraryA(path.c_str());
     if (!module_) { lastError_ = "bass.dll was not found"; return false; }
     auto load = [this](auto& target, const char* name) { target = reinterpret_cast<std::decay_t<decltype(target)>>(GetProcAddress(static_cast<HMODULE>(module_), name)); return target != nullptr; };
@@ -51,7 +54,7 @@ bool OVBassApi::Load(const std::string& directory)
         Unload();
         return false;
     }
-    const std::string fxPath = directory.empty() ? "bass_fx.dll" : directory + "\\bass_fx.dll";
+    const std::string fxPath = runtimeDirectory_.empty() ? "bass_fx.dll" : runtimeDirectory_ + "\\bass_fx.dll";
     fxModule_ = LoadLibraryA(fxPath.c_str());
     if (!fxModule_) OV_LOG_WARN("Audio", "bass_fx.dll was not found; built-in DSP remains available");
     if (fxModule_) fxTempoCreate_ = reinterpret_cast<FxTempoCreateFn>(GetProcAddress(static_cast<HMODULE>(fxModule_), "BASS_FX_TempoCreate"));
@@ -73,6 +76,7 @@ void OVBassApi::Unload()
 #endif
     module_ = nullptr;
     fxModule_ = nullptr;
+    runtimeDirectory_.clear();
     init_ = nullptr; recordInit_ = nullptr; recordFree_ = nullptr; recordStart_ = nullptr; streamCreate_ = nullptr;
     free_ = nullptr;
     channelPlay_ = nullptr; channelStop_ = nullptr; channelFree_ = nullptr; channelSetAttribute_ = nullptr; channelGetData_ = nullptr;

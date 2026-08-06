@@ -167,7 +167,8 @@ if(TARGET ompvoice_server)
 endif()
 if(TARGET ov_client)
     list(APPEND OV_PACKAGE_ARTIFACT_COMMANDS
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:ov_client>" "${OV_PACKAGE_DIR}/ompvoice/ov_client.asi")
+        COMMAND ${CMAKE_COMMAND} -E rm -f "${OV_PACKAGE_DIR}/ompvoice/ov_client.asi"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:ov_client>" "${OV_PACKAGE_DIR}/ov_client.asi")
     list(APPEND OV_PACKAGE_ARTIFACT_COMMANDS
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${OV_BASS_ROOT}/bass.dll" "${OV_PACKAGE_DIR}/ompvoice/bass.dll"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${OV_BASS_FX_ROOT}/bass_fx.dll" "${OV_PACKAGE_DIR}/ompvoice/bass_fx.dll"

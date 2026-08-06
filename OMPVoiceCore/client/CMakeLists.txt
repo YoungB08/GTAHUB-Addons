@@ -80,9 +80,12 @@ if(BUILD_TESTING)
     target_include_directories(ov_bass_runtime_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/..")
     target_link_libraries(ov_bass_runtime_tests PRIVATE ov_shared psapi "${OV_BASS_ROOT}/c/bass.lib" "${OV_BASS_FX_ROOT}/C/bass_fx.lib")
     add_custom_command(TARGET ov_bass_runtime_tests POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${OV_BASS_ROOT}/bass.dll" "$<TARGET_FILE_DIR:ov_bass_runtime_tests>/bass.dll"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${OV_BASS_FX_ROOT}/bass_fx.dll" "$<TARGET_FILE_DIR:ov_bass_runtime_tests>/bass_fx.dll")
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:ov_bass_runtime_tests>/ompvoice"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${OV_BASS_ROOT}/bass.dll" "$<TARGET_FILE_DIR:ov_bass_runtime_tests>/ompvoice/bass.dll"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${OV_BASS_FX_ROOT}/bass_fx.dll" "$<TARGET_FILE_DIR:ov_bass_runtime_tests>/ompvoice/bass_fx.dll")
     add_test(NAME ov_bass_runtime_tests COMMAND ov_bass_runtime_tests)
+    set_tests_properties(ov_bass_runtime_tests PROPERTIES
+        WORKING_DIRECTORY "$<TARGET_FILE_DIR:ov_bass_runtime_tests>")
     add_executable(ov_client_lifecycle_tests tests/OVClientLifecycleTests.cpp)
     add_dependencies(ov_client_lifecycle_tests ov_client)
     target_link_libraries(ov_client_lifecycle_tests PRIVATE psapi)

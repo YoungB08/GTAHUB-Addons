@@ -26,6 +26,7 @@ int main()
     ov::client::OVBassApi bass;
     if (!bass.Load()) return 1;
     if (!bass.IsLoaded() || !bass.IsFxLoaded()) return 2;
+    if (bass.RuntimeDirectory() != "ompvoice") return 20;
 
     // Device 0 is BASS's no-sound output. It keeps this deterministic on CI
     // machines without an audio endpoint while exercising the real modules.

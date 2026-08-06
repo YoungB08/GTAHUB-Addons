@@ -715,16 +715,16 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Network
 
-- [ ] Average < 8 KB/s per speaker
-- [ ] Stable under 100 ms latency
+- [x] Average < 8 KB/s per speaker
+- [x] Stable under 100 ms latency
 - [x] Stable under 5% packet loss
 
 ## Latency
 
-- [ ] Capture < 5 ms
+- [x] Capture < 5 ms
 - [x] Encode < 2 ms
 - [x] Decode < 1 ms
-- [ ] End-to-end < 80 ms
+- [x] End-to-end < 80 ms
 
 ---
 

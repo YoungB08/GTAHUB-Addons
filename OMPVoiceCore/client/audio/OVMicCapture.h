@@ -27,6 +27,7 @@ public:
     [[nodiscard]] float Rms() const noexcept { return rms_.load(std::memory_order_relaxed); }
     [[nodiscard]] float Peak() const noexcept { return peak_.load(std::memory_order_relaxed); }
     [[nodiscard]] std::vector<float> Waveform() const;
+    static float MeasureCallbackMicros(std::size_t iterations);
 
 private:
     static int OV_BASS_CALL OnRecord(BassHandle handle, const void* buffer, BassDword length, void* user);

@@ -3,6 +3,7 @@
 #include "shared/OVConstants.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 
 namespace ov::client
@@ -28,6 +29,16 @@ std::vector<float> OVMicCapture::Waveform() const
     std::lock_guard<std::mutex> lock(waveformMutex_);
     return std::vector<float>(waveform_.begin(), waveform_.end());
 }
+float OVMicCapture::MeasureCallbackMicros(std::size_t iterations)
+{
+    OVBassApi bass;
+    OVMicCapture capture(bass);
+    std::array<std::int16_t, FRAME_SAMPLES> samples{};
+    const auto start = std::chrono::steady_clock::now();
+    for (std::size_t iteration = 0; iteration < iterations; ++iteration)
+        OnRecord(0, samples.data(), static_cast<BassDword>(samples.size() * sizeof(samples[0])), &capture);
+    return static_cast<float>(std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - start).count() / static_cast<double>(iterations));
+}
 
 int OV_BASS_CALL OVMicCapture::OnRecord(BassHandle, const void* buffer, BassDword length, void* user)
 {
@@ -37,8 +48,8 @@ int OV_BASS_CALL OVMicCapture::OnRecord(BassHandle, const void* buffer, BassDwor
     const std::size_t count = length / sizeof(std::int16_t);
     std::vector<std::int16_t> frame(samples, samples + count);
     double sum = 0.0;
-    std::int16_t peak = 0;
-    for (const auto sample : frame) { sum += static_cast<double>(sample) * sample; peak = std::max(peak, static_cast<std::int16_t>(std::abs(sample))); }
+    int peak = 0;
+    for (const auto sample : frame) { sum += static_cast<double>(sample) * sample; peak = std::max(peak, std::abs(static_cast<int>(sample))); }
     capture->rms_.store(frame.empty() ? 0.0F : static_cast<float>(std::sqrt(sum / frame.size()) / 32768.0), std::memory_order_relaxed);
     capture->peak_.store(static_cast<float>(peak) / 32768.0F, std::memory_order_relaxed);
     {

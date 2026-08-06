@@ -26,6 +26,7 @@ public:
     bool SendVoiceEnd();
     [[nodiscard]] bool IsConnected() const noexcept { return connected_.load(); }
     [[nodiscard]] std::uint32_t SentPackets() const noexcept { return sentPackets_.load(); }
+    [[nodiscard]] std::uint64_t SentBytes() const noexcept { return sentBytes_.load(); }
     [[nodiscard]] std::uint32_t ReceivedPackets() const noexcept { return receivedPackets_.load(); }
 
 private:
@@ -49,6 +50,7 @@ private:
     std::chrono::steady_clock::time_point lastReceive_{};
     std::size_t retryIndex_{};
     std::atomic_uint32_t sentPackets_{};
+    std::atomic_uint64_t sentBytes_{};
     std::atomic_uint32_t receivedPackets_{};
 };
 }

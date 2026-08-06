@@ -62,6 +62,27 @@ int main()
     if (!clients[0]->SendVoiceFrame(std::move(voice))) return Fail("voice data");
     if (!WaitFor([&routedVoice] { return routedVoice.load(); }, std::chrono::seconds(2))) return Fail("voice routing");
     clients[0]->SendVoiceEnd();
+    const auto bytesBefore = clients[0]->SentBytes();
+    const auto latencyStart = std::chrono::steady_clock::now();
+    std::atomic_int latencyMs{-1};
+    clients[1]->SetFrameHandler([&latencyMs, latencyStart](ov::VoiceFrame frame) {
+        if (frame.sequence == 2) latencyMs = static_cast<int>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - latencyStart).count());
+    });
+    clients[0]->SendVoiceBegin(1);
+    for (std::uint16_t sequence = 2; sequence < 52; ++sequence)
+    {
+        ov::VoiceFrame measured;
+        measured.channelId = 0;
+        measured.sequence = sequence;
+        measured.encoded.assign(100, 0x55);
+        if (!clients[0]->SendVoiceFrame(std::move(measured))) return Fail("measured voice data");
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+    clients[0]->SendVoiceEnd();
+    if (!WaitFor([&latencyMs] { return latencyMs.load() >= 0; }, std::chrono::seconds(2))) return Fail("voice latency measurement");
+    if (latencyMs.load() >= 80) return Fail("voice latency target");
+    const auto bytesPerSecond = clients[0]->SentBytes() - bytesBefore;
+    if (bytesPerSecond >= 8192) return Fail("voice bandwidth target");
     for (auto& client : clients) client->Stop();
     clients.clear();
 

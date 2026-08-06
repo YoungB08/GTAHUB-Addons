@@ -95,7 +95,7 @@ bool OVNetworkClient::Send(const std::vector<std::uint8_t>& packet)
     std::lock_guard<std::mutex> lock(socketMutex_);
     if (socket_ == -1) return false;
     const auto result = sendto(static_cast<ov_client_socket_t>(socket_), reinterpret_cast<const char*>(packet.data()), static_cast<int>(packet.size()), 0, reinterpret_cast<const sockaddr*>(&endpoint), sizeof(endpoint));
-    if (result == static_cast<int>(packet.size())) { ++sentPackets_; return true; }
+    if (result == static_cast<int>(packet.size())) { ++sentPackets_; sentBytes_ += packet.size(); return true; }
     connected_ = false;
     return false;
 }

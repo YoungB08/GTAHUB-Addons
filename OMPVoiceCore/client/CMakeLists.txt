@@ -58,6 +58,8 @@ if(BUILD_TESTING)
     add_executable(ov_client_audio_tests
         tests/OVAudioTests.cpp
         debug/OVPacketSimulator.cpp
+        audio/OVBassApi.cpp
+        audio/OVMicCapture.cpp
         audio/OVOpusEncoder.cpp
         audio/OVOpusDecoder.cpp
         audio/OVJitterBuffer.cpp
@@ -65,7 +67,7 @@ if(BUILD_TESTING)
         audio/OVHighPassFilter.cpp
         audio/OVAutomaticGain.cpp)
     target_include_directories(ov_client_audio_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/..")
-    target_link_libraries(ov_client_audio_tests PRIVATE opus)
+    target_link_libraries(ov_client_audio_tests PRIVATE opus ov_shared)
     add_test(NAME ov_client_audio_tests COMMAND ov_client_audio_tests)
     add_executable(ov_settings_state_tests tests/OVSettingsStateTests.cpp)
     target_include_directories(ov_settings_state_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/..")

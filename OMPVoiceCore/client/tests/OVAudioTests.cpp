@@ -2,6 +2,7 @@
 #include "audio/OVHighPassFilter.h"
 #include "audio/OVJitterBuffer.h"
 #include "audio/OVNoiseGate.h"
+#include "audio/OVMicCapture.h"
 #include "audio/OVOpusDecoder.h"
 #include "audio/OVOpusEncoder.h"
 #include "debug/OVPacketSimulator.h"
@@ -70,6 +71,7 @@ int main()
     for (int iteration = 0; iteration < 100; ++iteration) { const int jitterValue = simulator.Jitter(); if (jitterValue < -25 || jitterValue > 25) return 12; }
     simulator.SetLatency(100);
     if (simulator.Latency() != 100) return 13;
+    if (ov::client::OVMicCapture::MeasureCallbackMicros(500) >= 5000.0F) return 14;
     std::cout << "Audio codec and DSP tests passed\n";
     return 0;
 }

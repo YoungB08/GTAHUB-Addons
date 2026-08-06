@@ -10,21 +10,21 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Repository
 
-- [ ] Tạo Git repository
-- [ ] Tạo branch `main`
+- [x] Tạo Git repository
+- [x] Tạo branch `main`
 - [ ] Tạo branch `dev`
-- [ ] Tạo `.gitignore` cho VS2022 + CMake
-- [ ] Tạo `README.md`
-- [ ] Tạo `LICENSE`
+- [x] Tạo `.gitignore` cho VS2022 + CMake
+- [x] Tạo `README.md`
+- [x] Tạo `LICENSE`
 
 ## Build system
 
-- [ ] CMakeLists.txt root
+- [x] CMakeLists.txt root
 - [ ] Win32 build
 - [ ] x64 build
 - [ ] Visual Studio 2022 solution generate
-- [ ] Output thư mục `build/bin`
-- [ ] Output thư mục `build/lib`
+- [x] Output thư mục `build/bin`
+- [x] Output thư mục `build/lib`
 
 ---
 
@@ -60,8 +60,8 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## JSON
 
-- [ ] nlohmann/json include
-- [ ] Parse test OK
+- [x] nlohmann/json include
+- [x] Parse test OK
 
 ---
 
@@ -324,19 +324,19 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Packet structures
 
-- [ ] Handshake
-- [ ] VoiceBegin
-- [ ] VoiceData
-- [ ] VoiceEnd
-- [ ] Ping
-- [ ] Pong
+- [x] Handshake
+- [x] VoiceBegin
+- [x] VoiceData
+- [x] VoiceEnd
+- [x] Ping
+- [x] Pong
 
 ## Serialization
 
-- [ ] Little-endian consistency
-- [ ] Bounds checking
-- [ ] Version field
-- [ ] Magic validation
+- [x] Little-endian consistency
+- [x] Bounds checking
+- [x] Version field
+- [x] Magic validation
 
 ---
 
@@ -684,17 +684,17 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Load
 
-- [ ] Create default config if missing
-- [ ] Parse JSON safely
-- [ ] Validate ranges
-- [ ] Apply defaults on invalid values
+- [x] Create default config if missing
+- [x] Parse JSON safely
+- [x] Validate ranges
+- [x] Apply defaults on invalid values
 
 ## Save
 
 - [ ] Save on change
-- [ ] Pretty-print JSON
-- [ ] Atomic write
-- [ ] Backup previous config
+- [x] Pretty-print JSON
+- [x] Atomic write
+- [x] Backup previous config
 
 ## Hot reload
 

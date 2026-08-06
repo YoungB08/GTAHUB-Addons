@@ -1,0 +1,3 @@
+add_executable(ov_shared_tests OVSharedTests.cpp)
+target_link_libraries(ov_shared_tests PRIVATE ov_shared)
+add_test(NAME ov_shared_tests COMMAND ov_shared_tests)

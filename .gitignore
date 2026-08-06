@@ -3,3 +3,19 @@ build/
 *.user
 *.suo
 
+# CMake and Visual Studio
+out/
+cmake-build-*/
+CMakeSettings.json
+*.VC.db
+*.VC.opendb
+*.sln.cache
+
+# OMPVoiceCore runtime output
+OMPVoiceCore/runtime/
+OMPVoiceCore/third_party/bass/bin/
+OMPVoiceCore/third_party/bass_fx/bin/
+ompvoice/logs/
+ompvoice/records/
+ompvoice/debug/
+*.dmp

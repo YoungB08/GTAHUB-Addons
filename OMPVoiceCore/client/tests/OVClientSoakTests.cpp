@@ -57,15 +57,18 @@ int main(int argc, char** argv)
 {
     std::string mode = "ptt";
     int durationSeconds = 5;
+    int port = ov::OMPVOICE_PORT;
     for (int index = 1; index < argc; ++index)
     {
         const std::string argument = argv[index];
         if (argument.rfind("--mode=", 0) == 0) mode = argument.substr(7);
         else if (argument.rfind("--duration=", 0) == 0) durationSeconds = std::atoi(argument.c_str() + 11);
+        else if (argument.rfind("--port=", 0) == 0) port = std::atoi(argument.c_str() + 7);
         else return Fail("unknown command-line argument");
     }
     if ((mode != "ptt" && mode != "idle") || durationSeconds < 1 || durationSeconds > 86400)
         return Fail("invalid soak mode or duration");
+    if (port < 1 || port > 65535) return Fail("invalid soak port");
 
     constexpr std::uint16_t speakerId = 21;
     constexpr std::uint16_t listenerId = 22;
@@ -73,13 +76,14 @@ int main(int argc, char** argv)
     channels.UpsertPlayer(speakerId, {}, -1);
     channels.UpsertPlayer(listenerId, {1.0F, 0.0F, 0.0F}, -1);
     ov::server::OVVoiceServer server(channels);
-    if (!server.Start()) return Fail("UDP voice server start");
+    const auto voicePort = static_cast<std::uint16_t>(port);
+    if (!server.Start(voicePort)) return Fail("UDP voice server start");
 
     ov::client::OVNetworkClient speaker;
     ov::client::OVNetworkClient listener;
-    if (!speaker.Configure("127.0.0.1", ov::OMPVOICE_PORT, speakerId) || !speaker.Start())
+    if (!speaker.Configure("127.0.0.1", voicePort, speakerId) || !speaker.Start())
         return Fail("speaker client start");
-    if (!listener.Configure("127.0.0.1", ov::OMPVOICE_PORT, listenerId) || !listener.Start())
+    if (!listener.Configure("127.0.0.1", voicePort, listenerId) || !listener.Start())
         return Fail("listener client start");
     if (!WaitFor([&] { return speaker.IsConnected() && listener.IsConnected(); }, std::chrono::seconds(3)))
         return Fail("voice client handshakes");
@@ -153,7 +157,8 @@ int main(int argc, char** argv)
     listener.Stop();
     speaker.Stop();
     server.Stop();
-    std::cout << "PASS mode=" << mode << " duration=" << durationSeconds << "s sent=" << sentFrames.load()
+    std::cout << "PASS mode=" << mode << " duration=" << durationSeconds << "s port=" << voicePort
+              << " sent=" << sentFrames.load()
               << " received=" << receivedFrames.load() << " handles=" << baseline.handles << "->" << final.handles
               << " private_bytes=" << baseline.privateBytes << "->" << final.privateBytes << '\n';
     return 0;

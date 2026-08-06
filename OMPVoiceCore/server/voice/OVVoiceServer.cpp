@@ -27,7 +27,12 @@ OVVoiceServer::~OVVoiceServer() { Stop(); }
 
 bool OVVoiceServer::Start()
 {
-    return socket_.Start(OMPVOICE_PORT, [this](const UdpEndpoint& endpoint, const std::vector<std::uint8_t>& datagram) { OnPacket(endpoint, datagram); });
+    return Start(OMPVOICE_PORT);
+}
+
+bool OVVoiceServer::Start(std::uint16_t port)
+{
+    return socket_.Start(port, [this](const UdpEndpoint& endpoint, const std::vector<std::uint8_t>& datagram) { OnPacket(endpoint, datagram); });
 }
 
 void OVVoiceServer::Stop()

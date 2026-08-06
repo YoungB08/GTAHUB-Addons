@@ -17,6 +17,7 @@ public:
     explicit OVVoiceServer(OVChannelManager& channels);
     ~OVVoiceServer();
     bool Start();
+    bool Start(std::uint16_t port);
     void Stop();
     void UpdatePlayer(int playerId, const Vector3& position, int vehicleId);
     void RemovePlayer(int playerId);

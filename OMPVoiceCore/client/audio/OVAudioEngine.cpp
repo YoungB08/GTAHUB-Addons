@@ -14,10 +14,10 @@ OVAudioEngine::OVAudioEngine(OVBassApi& bass)
 {
 }
 OVAudioEngine::~OVAudioEngine() { Shutdown(); }
-bool OVAudioEngine::Initialize()
+bool OVAudioEngine::Initialize(int outputDevice)
 {
     if (initialized_) return true;
-    if (!bass_.Load() || !encoder_.Initialize() || !loopbackDecoder_.Initialize() || !playback_.Initialize())
+    if (!bass_.Load() || !encoder_.Initialize() || !loopbackDecoder_.Initialize() || !playback_.Initialize(outputDevice))
     {
         OV_LOG_ERROR("Audio", "Audio initialization failed: %s", bass_.LastError().c_str());
         return false;
@@ -83,27 +83,39 @@ void OVAudioEngine::ProcessCapture()
     {
         std::vector<std::int16_t> pcm(captureBuffer_.begin(), captureBuffer_.begin() + FRAME_SAMPLES);
         captureBuffer_.erase(captureBuffer_.begin(), captureBuffer_.begin() + FRAME_SAMPLES);
-        for (auto& sample : pcm) sample = static_cast<std::int16_t>(std::clamp(static_cast<float>(sample) * microphoneVolume_, -32768.0F, 32767.0F));
-        if (highPassEnabled_ && !capture_.HasBassHighPass()) highPass_.Process(pcm);
-        if (noiseSuppressionEnabled_) noiseGate_.Process(pcm);
-        agc_.Process(pcm);
-        const float rms = capture_.Rms();
-        if (voiceActivationEnabled_)
-        {
-            if (rms >= voiceActivationThreshold_) { activationFrames_ = std::min(activationFrames_ + 1, 2); releaseFrames_ = 10; }
-            else { activationFrames_ = 0; if (releaseFrames_ > 0) --releaseFrames_; }
-            if (activationFrames_ >= 2) voiceActive_ = true;
-            if (releaseFrames_ == 0) voiceActive_ = false;
-        }
-        else voiceActive_ = false;
-        if ((!transmitting_ && !voiceActive_) || pcm.empty()) continue;
-        auto encoded = encoder_.Encode(pcm.data(), pcm.size());
-        if (encoded.empty()) continue;
-        if (loopback_) playback_.PushMono(loopbackDecoder_.Decode(encoded.data(), encoded.size(), false), 1.0F, 0.0F);
-        EncodedFrameHandler callback;
-        { std::lock_guard<std::mutex> lock(handlerMutex_); callback = frameHandler_; }
-        if (callback) callback(std::move(encoded));
+        ProcessCaptureFrame(std::move(pcm));
     }
+}
+
+bool OVAudioEngine::InjectDebugCaptureFrame(std::vector<std::int16_t> pcm)
+{
+    if (!initialized_ || pcm.size() != FRAME_SAMPLES) return false;
+    return ProcessCaptureFrame(std::move(pcm));
+}
+
+bool OVAudioEngine::ProcessCaptureFrame(std::vector<std::int16_t> pcm)
+{
+    for (auto& sample : pcm) sample = static_cast<std::int16_t>(std::clamp(static_cast<float>(sample) * microphoneVolume_, -32768.0F, 32767.0F));
+    if (highPassEnabled_ && !capture_.HasBassHighPass()) highPass_.Process(pcm);
+    if (noiseSuppressionEnabled_) noiseGate_.Process(pcm);
+    agc_.Process(pcm);
+    const float rms = capture_.Rms();
+    if (voiceActivationEnabled_)
+    {
+        if (rms >= voiceActivationThreshold_) { activationFrames_ = std::min(activationFrames_ + 1, 2); releaseFrames_ = 10; }
+        else { activationFrames_ = 0; if (releaseFrames_ > 0) --releaseFrames_; }
+        if (activationFrames_ >= 2) voiceActive_ = true;
+        if (releaseFrames_ == 0) voiceActive_ = false;
+    }
+    else voiceActive_ = false;
+    if ((!transmitting_ && !voiceActive_) || pcm.empty()) return false;
+    auto encoded = encoder_.Encode(pcm.data(), pcm.size());
+    if (encoded.empty()) return false;
+    if (loopback_) playback_.PushMono(loopbackDecoder_.Decode(encoded.data(), encoded.size(), false), 1.0F, 0.0F);
+    EncodedFrameHandler callback;
+    { std::lock_guard<std::mutex> lock(handlerMutex_); callback = frameHandler_; }
+    if (callback) callback(std::move(encoded));
+    return true;
 }
 void OVAudioEngine::ProcessRemote()
 {

@@ -28,7 +28,7 @@ public:
     using EncodedFrameHandler = std::function<void(std::vector<std::uint8_t>)>;
     explicit OVAudioEngine(OVBassApi& bass);
     ~OVAudioEngine();
-    bool Initialize();
+    bool Initialize(int outputDevice = -1);
     void Shutdown();
     bool StartCapture();
     void StopCapture();
@@ -45,6 +45,7 @@ public:
     void SetFrameHandler(EncodedFrameHandler handler);
     void OnRemoteFrame(VoiceFrame frame);
     void Update();
+    bool InjectDebugCaptureFrame(std::vector<std::int16_t> pcm);
     [[nodiscard]] bool IsCapturing() const noexcept { return capture_.IsCapturing(); }
     [[nodiscard]] float MicRms() const noexcept { return capture_.Rms(); }
     [[nodiscard]] float MicPeak() const noexcept { return capture_.Peak(); }
@@ -52,6 +53,7 @@ public:
     [[nodiscard]] bool IsTransmitting() const noexcept { return transmitting_.load(std::memory_order_relaxed); }
     [[nodiscard]] std::vector<int> RemotePlayerIds() const;
     [[nodiscard]] std::size_t RemoteStreamCount() const noexcept { return remoteStreamCount_.load(); }
+    [[nodiscard]] std::uint64_t PlayedSamples() const noexcept { return playback_.PlayedSamples(); }
 
 private:
     struct RemoteStream
@@ -68,6 +70,7 @@ private:
     };
     void ProcessLoop();
     void ProcessCapture();
+    bool ProcessCaptureFrame(std::vector<std::int16_t> pcm);
     void ProcessRemote();
     static void ApplyModeEffect(RemoteStream& stream, std::vector<std::int16_t>& pcm);
     OVBassApi& bass_;

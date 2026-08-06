@@ -801,11 +801,11 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ### Self-debug
 
-- [ ] Loopback works
-- [ ] Mirror mode works
-- [ ] Fake remote works
+- [x] Loopback works
+- [x] Mirror mode works
+- [x] Fake remote works
 - [x] Packet simulator works
-- [ ] Oscilloscope works
+- [x] Oscilloscope works
 - [x] Diagnostic report works
 
 ### Stability

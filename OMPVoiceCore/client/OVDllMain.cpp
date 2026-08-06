@@ -2,6 +2,7 @@
 #include "audio/OVBassApi.h"
 #include "config/OVClientConfig.h"
 #include "debug/OVDiagnostic.h"
+#include "debug/OVDebugVoiceRouter.h"
 #include "hooks/OVGameHooks.h"
 #include "network/OVNetworkClient.h"
 #include "debug/OVPacketSimulator.h"
@@ -45,18 +46,9 @@ public:
             simulator_.SetPacketLoss(config_.Values().debug.packetLoss);
             if (simulator_.Drop()) return;
             const bool fakeRemote = fakeRemoteActive_.load(std::memory_order_relaxed);
-            if (mirrorModeActive_.load(std::memory_order_relaxed) || fakeRemote)
-            {
-                VoiceFrame mirror = frame;
-                mirror.playerId = 999;
-                if (fakeRemote)
-                {
-                    const float phase = static_cast<float>(GetTickCount64() % 6000U) / 6000.0F * 6.2831853F;
-                    mirror.pan = std::sin(phase) * 0.85F;
-                    mirror.gain = 0.35F + 0.45F * (std::sin(phase * 0.5F) * 0.5F + 0.5F);
-                }
-                audio_.OnRemoteFrame(std::move(mirror));
-            }
+            if (auto routed = OVDebugVoiceRouter::Route(frame, mirrorModeActive_.load(std::memory_order_relaxed),
+                                                        fakeRemote, GetTickCount64()))
+                audio_.OnRemoteFrame(std::move(*routed));
             network_.SendVoiceFrame(std::move(frame));
         });
         network_.Configure("127.0.0.1", OMPVOICE_PORT, playerId_);

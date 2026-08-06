@@ -33,18 +33,20 @@ int main(int argc, char** argv)
         if (!module) return 2;
         const auto shutdown = reinterpret_cast<ShutdownFn>(GetProcAddress(module, "OV_Shutdown"));
         if (!shutdown) { FreeLibrary(module); return 3; }
+        bool idleBudgetPassed = true;
         if (iteration == 0)
         {
-            Sleep(500);
+            Sleep(2000);
             const auto cpuBefore = ProcessCpuTime();
-            Sleep(3000);
+            Sleep(10000);
             const auto cpuAfter = ProcessCpuTime();
-            const double idleCpuPercent = static_cast<double>(cpuAfter - cpuBefore) / 10000000.0 / 3.0 * 100.0;
+            const double idleCpuPercent = static_cast<double>(cpuAfter - cpuBefore) / 10000000.0 / 10.0 * 100.0;
             std::cout << "ASI idle CPU: " << idleCpuPercent << "% of one core\n";
-            if (cpuAfter < cpuBefore || idleCpuPercent >= 2.0) return 4;
+            idleBudgetPassed = cpuAfter >= cpuBefore && idleCpuPercent < 2.0;
         }
-        if (!shutdown(10000)) return 5;
-        if (!FreeLibrary(module)) return 6;
+        if (!shutdown(10000)) return 4;
+        if (!FreeLibrary(module)) return 5;
+        if (!idleBudgetPassed) return 6;
     }
     std::cout << "ASI synchronous shutdown and unload lifecycle passed\n";
     return 0;

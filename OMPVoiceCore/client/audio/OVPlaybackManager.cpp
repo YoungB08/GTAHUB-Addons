@@ -10,10 +10,10 @@ namespace ov::client
 {
 OVPlaybackManager::OVPlaybackManager(OVBassApi& bass) : bass_(bass) {}
 OVPlaybackManager::~OVPlaybackManager() { Shutdown(); }
-bool OVPlaybackManager::Initialize()
+bool OVPlaybackManager::Initialize(int outputDevice)
 {
     if (stream_ != 0) return true;
-    if (!bass_.InitOutput(SAMPLE_RATE)) return false;
+    if (!bass_.InitOutput(SAMPLE_RATE, outputDevice)) return false;
     stream_ = bass_.CreateStream(SAMPLE_RATE, 2, &OVPlaybackManager::OnStream, this);
     if (stream_ == 0) return false;
     bass_.ChannelSetVolume(stream_, 1.0F);
@@ -69,6 +69,7 @@ BassDword OV_BASS_CALL OVPlaybackManager::OnStream(BassHandle, void* buffer, Bas
             samples[index] = static_cast<std::int16_t>(std::clamp(static_cast<float>(samples[index]) * playback->currentVolume_, -32768.0F, 32767.0F));
     }
     if (bytes < length) std::memset(static_cast<std::uint8_t*>(buffer) + bytes, 0, length - bytes);
+    playback->playedSamples_.fetch_add(bytes / sizeof(std::int16_t), std::memory_order_relaxed);
     playback->readOffset_ += bytes / sizeof(std::int16_t);
     if (playback->readOffset_ > 4096 && playback->readOffset_ * 2 > playback->queue_.size())
     {

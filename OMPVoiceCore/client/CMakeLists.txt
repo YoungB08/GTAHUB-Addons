@@ -34,6 +34,7 @@ add_library(ov_client SHARED
     hooks/OVGameHooks.cpp
     debug/OVLoopback.cpp
     debug/OVFakeRemote.cpp
+    debug/OVDebugVoiceRouter.cpp
     debug/OVPacketSimulator.cpp
     debug/OVDiagnostic.cpp)
 
@@ -94,4 +95,23 @@ if(BUILD_TESTING)
     add_executable(ov_settings_state_tests tests/OVSettingsStateTests.cpp)
     target_include_directories(ov_settings_state_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/..")
     add_test(NAME ov_settings_state_tests COMMAND ov_settings_state_tests)
+    add_executable(ov_debug_modes_tests
+        tests/OVDebugModesTests.cpp
+        audio/OVAudioEngine.cpp
+        audio/OVBassApi.cpp
+        audio/OVMicCapture.cpp
+        audio/OVOpusEncoder.cpp
+        audio/OVOpusDecoder.cpp
+        audio/OVPlaybackManager.cpp
+        audio/OVJitterBuffer.cpp
+        audio/OVNoiseGate.cpp
+        audio/OVHighPassFilter.cpp
+        audio/OVAutomaticGain.cpp
+        debug/OVDebugVoiceRouter.cpp)
+    target_include_directories(ov_debug_modes_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/..")
+    target_link_libraries(ov_debug_modes_tests PRIVATE opus ov_shared winmm "${OV_BASS_ROOT}/c/bass.lib" "${OV_BASS_FX_ROOT}/C/bass_fx.lib")
+    add_custom_command(TARGET ov_debug_modes_tests POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${OV_BASS_ROOT}/bass.dll" "$<TARGET_FILE_DIR:ov_debug_modes_tests>/bass.dll"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${OV_BASS_FX_ROOT}/bass_fx.dll" "$<TARGET_FILE_DIR:ov_debug_modes_tests>/bass_fx.dll")
+    add_test(NAME ov_debug_modes_tests COMMAND ov_debug_modes_tests)
 endif()

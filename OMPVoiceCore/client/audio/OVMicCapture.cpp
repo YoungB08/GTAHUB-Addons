@@ -53,6 +53,10 @@ float OVMicCapture::MeasureCallbackMicros(std::size_t iterations)
         OnRecord(0, samples.data(), static_cast<BassDword>(samples.size() * sizeof(samples[0])), &capture);
     return static_cast<float>(std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - start).count() / static_cast<double>(iterations));
 }
+void OVMicCapture::InjectSamplesForTesting(const std::vector<std::int16_t>& samples)
+{
+    if (!samples.empty()) OnRecord(0, samples.data(), static_cast<BassDword>(samples.size() * sizeof(samples[0])), this);
+}
 
 int OV_BASS_CALL OVMicCapture::OnRecord(BassHandle, const void* buffer, BassDword length, void* user)
 {

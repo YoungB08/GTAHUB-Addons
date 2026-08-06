@@ -5,6 +5,7 @@
 
 #ifdef _WIN32
 #include <Windows.h>
+#include <atomic>
 #include <cstring>
 #include <d3d9.h>
 #include <memory>
@@ -32,9 +33,15 @@ HRESULT WINAPI HookEndScene(IDirect3DDevice9* device)
 }
 HRESULT WINAPI HookReset(IDirect3DDevice9* device, D3DPRESENT_PARAMETERS* parameters)
 {
+    static std::atomic_uint32_t resetCount{};
+    const auto reset = ++resetCount;
+    OV_LOG_DEBUG("Render", "DX9 Reset #%u begin", reset);
     if (const auto renderer = g_renderer.lock()) renderer->OnResetBefore();
+    OV_LOG_DEBUG("Render", "DX9 Reset #%u objects invalidated", reset);
     const HRESULT result = g_originalReset ? g_originalReset(device, parameters) : D3D_OK;
+    OV_LOG_DEBUG("Render", "DX9 Reset #%u original returned 0x%08lX", reset, static_cast<unsigned long>(result));
     if (SUCCEEDED(result)) if (const auto renderer = g_renderer.lock()) renderer->OnResetAfter(device);
+    OV_LOG_DEBUG("Render", "DX9 Reset #%u complete", reset);
     return result;
 }
 LRESULT CALLBACK DummyWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam)

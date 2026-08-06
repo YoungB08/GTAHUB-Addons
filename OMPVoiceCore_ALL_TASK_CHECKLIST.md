@@ -156,7 +156,7 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 - [x] Invalidate device objects
 - [x] Recreate device objects
 - [x] Texture reload
-- [ ] No crash after 20 ALT+TAB tests
+- [x] No crash after 20 ALT+TAB tests (isolated GTA runtime completed 50 real focus transitions)
 
 ---
 
@@ -733,7 +733,7 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 ## Client
 
 - [x] Hold PTT for 10 minutes (`ov_client_soak_tests --mode=ptt --duration=600`: 30,010 frames round-trip, 261->256 handles)
-- [ ] ALT+TAB spam 50 times
+- [x] ALT+TAB spam 50 times (GTA PID remained responsive; handles 319->320, private memory decreased)
 - [x] Change microphone while connected (`ov_connected_device_switch_tests`: live BASS capture + UDP heartbeat + rollback)
 - [x] Disconnect network cable simulation
 

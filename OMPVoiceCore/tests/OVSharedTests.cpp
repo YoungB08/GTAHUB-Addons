@@ -1,6 +1,7 @@
 #include "shared/OVConfig.h"
 #include "shared/OVCrashSafety.h"
 #include "shared/OVPacket.h"
+#include "shared/OVLogger.h"
 #include "server/debug/ServerVoiceDebug.h"
 
 #include <filesystem>
@@ -63,6 +64,20 @@ int main()
     Check(std::filesystem::exists(diagnosticPath), "server diagnostic output exists");
     std::error_code diagnosticError;
     std::filesystem::remove_all(std::filesystem::path(diagnosticPath).parent_path(), diagnosticError);
+    const auto logDirectory = std::filesystem::temp_directory_path() / "ompvoice-log-rotation-test";
+    auto& logger = ov::Logger::Instance();
+    logger.SetMaxBytesForTesting(128);
+    Check(logger.Initialize(logDirectory, "client.log", "Test"), "logger initialize");
+    for (int index = 0; index < 20; ++index)
+    {
+        logger.Write(ov::LogLevel::Info, "Core", "rotation payload %d xxxxxxxxxxxxxxxxxxxxxxxxxxxxx", index);
+        logger.Write(ov::LogLevel::Info, "Audio", "rotation payload %d xxxxxxxxxxxxxxxxxxxxxxxxxxxxx", index);
+    }
+    logger.Shutdown();
+    Check(std::filesystem::exists(logDirectory / "client.log.1"), "primary log rotation");
+    Check(std::filesystem::exists(logDirectory / "audio.log.1"), "subsystem log rotation");
+    logger.SetMaxBytesForTesting(4U * 1024U * 1024U);
+    std::filesystem::remove_all(logDirectory, diagnosticError);
     Check(ov::CrashSafety::Install(std::filesystem::temp_directory_path() / "ompvoice-crash-test"), "crash handler install");
     ov::CrashSafety::Uninstall();
 

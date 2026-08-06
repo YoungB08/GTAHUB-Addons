@@ -18,9 +18,10 @@ public:
     bool Initialize(const std::filesystem::path& directory, const std::string& fileName, const std::string& threadName);
     void Shutdown();
     void Write(LogLevel level, const char* subsystem, const char* format, ...);
+    void SetMaxBytesForTesting(std::size_t bytes) noexcept { maxBytes_ = bytes; }
 
 private:
-    void RotateIfNeeded();
+    void RotateIfNeeded(const std::filesystem::path& path, std::ofstream* openStream = nullptr);
     std::mutex mutex_;
     std::ofstream stream_;
     std::unordered_map<std::string, std::ofstream> subsystemStreams_;

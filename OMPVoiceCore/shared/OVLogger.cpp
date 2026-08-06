@@ -28,7 +28,7 @@ bool Logger::Initialize(const std::filesystem::path& directory, const std::strin
     path_ = directory / fileName;
     primaryFileName_ = fileName;
     threadName_ = threadName;
-    RotateIfNeeded();
+    RotateIfNeeded(path_);
     stream_.open(path_, std::ios::app);
     return stream_.is_open();
 }
@@ -41,15 +41,17 @@ void Logger::Shutdown()
     subsystemStreams_.clear();
 }
 
-void Logger::RotateIfNeeded()
+void Logger::RotateIfNeeded(const std::filesystem::path& path, std::ofstream* openStream)
 {
     std::error_code error;
-    if (!path_.empty() && std::filesystem::exists(path_, error) && std::filesystem::file_size(path_, error) >= maxBytes_)
+    if (!path.empty() && std::filesystem::exists(path, error) && std::filesystem::file_size(path, error) >= maxBytes_)
     {
-        const auto backup = path_.string() + ".1";
+        if (openStream && openStream->is_open()) openStream->close();
+        const auto backup = path.string() + ".1";
         std::filesystem::remove(backup, error);
         error.clear();
-        std::filesystem::rename(path_, backup, error);
+        std::filesystem::rename(path, backup, error);
+        if (openStream) openStream->open(path, std::ios::app);
     }
 }
 
@@ -79,6 +81,7 @@ void Logger::Write(LogLevel level, const char* subsystem, const char* format, ..
     formatted += threadName_ + "][" + (subsystem ? subsystem : "Core") + "][" + names[static_cast<int>(level)] + "] " + message.data() + '\n';
 
     std::lock_guard<std::mutex> lock(mutex_);
+    RotateIfNeeded(path_, &stream_);
     std::ofstream* output = &stream_;
     const std::string subsystemName = subsystem ? subsystem : "Core";
     std::string routedFile;
@@ -94,6 +97,7 @@ void Logger::Write(LogLevel level, const char* subsystem, const char* format, ..
             std::ofstream target(targetPath, std::ios::app);
             it = subsystemStreams_.emplace(routedFile, std::move(target)).first;
         }
+        RotateIfNeeded(path_.parent_path() / routedFile, &it->second);
         output = &it->second;
     }
     if (output->is_open())

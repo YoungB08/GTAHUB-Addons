@@ -9,6 +9,8 @@ option(OV_BUILD_SERVER "Build the open.mp server component" ON)
 option(OV_BUILD_CLIENT "Build the SA:MP 0.3.DL R1 ASI client" ON)
 option(OV_BUILD_TESTS "Build OMPVoiceCore unit tests" ON)
 option(OV_FETCH_DEPENDENCIES "Download open-source dependencies at configure time" ON)
+set(OV_BASS_ROOT "" CACHE PATH "Official BASS 2.4 Win32 package root (contains c/bass.lib and bass.dll)")
+set(OV_BASS_FX_ROOT "" CACHE PATH "Official BASS FX 2.4 Win32 package root (contains C/bass_fx.lib and bass_fx.dll)")
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -109,6 +111,37 @@ if(OV_BUILD_CLIENT)
                 GIT_SHALLOW TRUE)
             FetchContent_MakeAvailable(minhook)
         endif()
+
+        # BASS is proprietary, so the repository contains no binary. Fetch the
+        # official archives by checksum at configure time and use their Win32
+        # import libraries/headers; the resulting package remains subject to
+        # the BASS license and is not committed.
+        if(NOT OV_BASS_ROOT OR NOT OV_BASS_FX_ROOT)
+            if(NOT OV_FETCH_DEPENDENCIES)
+                message(FATAL_ERROR "Win32 client requires OV_BASS_ROOT and OV_BASS_FX_ROOT when OV_FETCH_DEPENDENCIES=OFF")
+            endif()
+            FetchContent_Declare(
+                ov_bass_runtime
+                URL https://www.un4seen.com/files/bass24.zip
+                DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+                URL_HASH SHA256=3A03EC9A33D0F4F9D167660DA51C8BB1432E8977496995455AB137277D69636E)
+            FetchContent_Declare(
+                ov_bass_fx_runtime
+                URL https://www.un4seen.com/files/z/0/bass_fx24.zip
+                DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+                URL_HASH SHA256=A4BAF602865941963127ACB15ED12627D108189F99C2757970432AE7DA0366CD)
+            FetchContent_MakeAvailable(ov_bass_runtime ov_bass_fx_runtime)
+            set(OV_BASS_ROOT "${ov_bass_runtime_SOURCE_DIR}" CACHE PATH "Official BASS 2.4 Win32 package root" FORCE)
+            set(OV_BASS_FX_ROOT "${ov_bass_fx_runtime_SOURCE_DIR}" CACHE PATH "Official BASS FX 2.4 Win32 package root" FORCE)
+        endif()
+        if(NOT EXISTS "${OV_BASS_ROOT}/c/bass.lib" OR NOT EXISTS "${OV_BASS_ROOT}/bass.dll")
+            message(FATAL_ERROR "OV_BASS_ROOT must contain c/bass.lib and bass.dll")
+        endif()
+        if(NOT EXISTS "${OV_BASS_FX_ROOT}/C/bass_fx.lib" OR NOT EXISTS "${OV_BASS_FX_ROOT}/bass_fx.dll")
+            message(FATAL_ERROR "OV_BASS_FX_ROOT must contain C/bass_fx.lib and bass_fx.dll")
+        endif()
+        set(OV_BASS_RUNTIME_DIR "${OV_BASS_ROOT}" CACHE PATH "Resolved BASS runtime directory" FORCE)
+        set(OV_BASS_FX_RUNTIME_DIR "${OV_BASS_FX_ROOT}" CACHE PATH "Resolved BASS FX runtime directory" FORCE)
         add_subdirectory(client)
     else()
         message(STATUS "ov_client is Win32-only; the server and tests remain available on this platform")
@@ -135,6 +168,11 @@ endif()
 if(TARGET ov_client)
     list(APPEND OV_PACKAGE_ARTIFACT_COMMANDS
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:ov_client>" "${OV_PACKAGE_DIR}/ompvoice/ov_client.asi")
+    list(APPEND OV_PACKAGE_ARTIFACT_COMMANDS
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${OV_BASS_ROOT}/bass.dll" "${OV_PACKAGE_DIR}/ompvoice/bass.dll"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${OV_BASS_FX_ROOT}/bass_fx.dll" "${OV_PACKAGE_DIR}/ompvoice/bass_fx.dll"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${OV_BASS_ROOT}/bass.txt" "${OV_PACKAGE_DIR}/licenses/BASS.txt"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${OV_BASS_FX_ROOT}/bass_fx.txt" "${OV_PACKAGE_DIR}/licenses/BASS_FX.txt")
 endif()
 add_custom_target(ompvoice_package ALL
     COMMAND ${CMAKE_COMMAND} -E make_directory "${OV_PACKAGE_DIR}/plugins"
@@ -142,11 +180,13 @@ add_custom_target(ompvoice_package ALL
     COMMAND ${CMAKE_COMMAND} -E make_directory "${OV_PACKAGE_DIR}/ompvoice/logs"
     COMMAND ${CMAKE_COMMAND} -E make_directory "${OV_PACKAGE_DIR}/ompvoice/records"
     COMMAND ${CMAKE_COMMAND} -E make_directory "${OV_PACKAGE_DIR}/ompvoice/debug"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${OV_PACKAGE_DIR}/licenses"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/config/config.json" "${OV_PACKAGE_DIR}/ompvoice/config.json"
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/client/resources" "${OV_PACKAGE_DIR}/ompvoice/resources"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/pawno/include/ompvoice.inc" "${OV_PACKAGE_DIR}/ompvoice/ompvoice.inc"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/README.md" "${OV_PACKAGE_DIR}/README.md"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/INSTALL.md" "${OV_PACKAGE_DIR}/INSTALL.md"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/CHANGELOG.md" "${OV_PACKAGE_DIR}/CHANGELOG.md"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/LICENSE" "${OV_PACKAGE_DIR}/licenses/OMPVoiceCore-LICENSE.txt"
     ${OV_PACKAGE_ARTIFACT_COMMANDS}
     DEPENDS ${OV_PACKAGE_DEPENDS})

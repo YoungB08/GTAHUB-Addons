@@ -32,15 +32,15 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## BASS
 
-- [ ] bass.lib
-- [ ] bass.dll
-- [ ] Include path đúng
-- [ ] Runtime copy sau build
+- [x] bass.lib
+- [x] bass.dll
+- [x] Include path đúng
+- [x] Runtime copy sau build
 
 ## BASS FX
 
-- [ ] bass_fx.lib
-- [ ] bass_fx.dll
+- [x] bass_fx.lib
+- [x] bass_fx.dll
 
 ## Opus
 
@@ -267,7 +267,7 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## High-pass filter
 
-- [ ] BASS FX create
+- [x] BASS FX create
 - [x] 120 Hz cutoff
 - [x] Toggle on/off
 
@@ -753,8 +753,8 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 - [x] `ompvoice.dll`
 - [x] `ov_client.asi`
 - [x] `ompvoice.inc`
-- [ ] `bass.dll`
-- [ ] `bass_fx.dll`
+- [x] `bass.dll`
+- [x] `bass_fx.dll`
 - [x] `README.md`
 - [x] `INSTALL.md`
 - [x] `CHANGELOG.md`

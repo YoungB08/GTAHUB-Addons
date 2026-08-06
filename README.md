@@ -17,6 +17,8 @@ ctest --test-dir out/vs2022-x86 -C Release --output-on-failure
 ```
 
 For the x64 server build, use `-A x64`; the 32-bit ASI target is intentionally
-excluded from x64 configurations. Official 32-bit `bass.dll` and `bass_fx.dll`
-must be provided at packaging/runtime because their licenses do not permit the
-repository to treat them as ordinary open-source FetchContent dependencies.
+excluded from x64 configurations. The client configure step downloads the
+official BASS 2.4 and BASS FX archives by SHA-256, links only their Win32
+import libraries, and copies the DLLs into the local package. The proprietary
+runtime is never committed; commercial redistribution still requires an
+appropriate Un4seen license.

@@ -22,8 +22,10 @@ public:
     bool Initialize(int device);
     bool Start();
     void Stop();
+    void EnableHighPass(bool enable);
     [[nodiscard]] std::optional<std::vector<std::int16_t>> PopFrame();
     [[nodiscard]] bool IsCapturing() const noexcept { return recordHandle_ != 0; }
+    [[nodiscard]] bool HasBassHighPass() const noexcept { return highPassFx_ != 0; }
     [[nodiscard]] float Rms() const noexcept { return rms_.load(std::memory_order_relaxed); }
     [[nodiscard]] float Peak() const noexcept { return peak_.load(std::memory_order_relaxed); }
     [[nodiscard]] std::vector<float> Waveform() const;
@@ -34,6 +36,8 @@ private:
     OVBassApi& bass_;
     FrameQueue frames_{32};
     BassHandle recordHandle_{};
+    BassHandle highPassFx_{};
+    bool highPassEnabled_{true};
     std::atomic<float> rms_{};
     std::atomic<float> peak_{};
     mutable std::mutex waveformMutex_;

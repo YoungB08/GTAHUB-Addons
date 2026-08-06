@@ -47,6 +47,7 @@ void OVAudioEngine::StopCapture()
 }
 void OVAudioEngine::SetMasterVolume(float volume) { playback_.SetMasterVolume(std::clamp(volume, 0.0F, 1.0F)); }
 void OVAudioEngine::EnableSmoothing(bool enable) noexcept { smoothing_ = enable; playback_.SetSmoothing(enable); }
+void OVAudioEngine::EnableHighPass(bool enable) noexcept { highPassEnabled_ = enable; capture_.EnableHighPass(enable); }
 void OVAudioEngine::SetMicrophoneVolume(float volume) { microphoneVolume_ = std::clamp(volume, 0.0F, 2.0F); }
 bool OVAudioEngine::SetInputDevice(int device)
 {
@@ -83,7 +84,7 @@ void OVAudioEngine::ProcessCapture()
         std::vector<std::int16_t> pcm(captureBuffer_.begin(), captureBuffer_.begin() + FRAME_SAMPLES);
         captureBuffer_.erase(captureBuffer_.begin(), captureBuffer_.begin() + FRAME_SAMPLES);
         for (auto& sample : pcm) sample = static_cast<std::int16_t>(std::clamp(static_cast<float>(sample) * microphoneVolume_, -32768.0F, 32767.0F));
-        if (highPassEnabled_) highPass_.Process(pcm);
+        if (highPassEnabled_ && !capture_.HasBassHighPass()) highPass_.Process(pcm);
         if (noiseSuppressionEnabled_) noiseGate_.Process(pcm);
         agc_.Process(pcm);
         const float rms = capture_.Rms();

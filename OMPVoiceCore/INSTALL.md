@@ -11,8 +11,9 @@
 ## Client
 
 1. Copy `ompvoice/ov_client.asi` beside the SA:MP 0.3.DL R1 executable.
-2. Put the official 32-bit `bass.dll` and `bass_fx.dll` beside the ASI. These
-   files are not redistributed by this project.
+2. Keep the packaged 32-bit `bass.dll` and `bass_fx.dll` beside the ASI. CMake
+   downloads these files from the official checksum-pinned archives; review
+   the BASS license before redistributing a commercial build.
 3. Copy the complete `ompvoice/` directory beside the ASI. The client creates
    `logs`, `records`, and `debug` directories automatically.
 4. Set the server address in the client configuration when it is not local.

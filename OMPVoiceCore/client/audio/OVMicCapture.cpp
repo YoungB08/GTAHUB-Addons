@@ -15,13 +15,27 @@ bool OVMicCapture::Start()
 {
     if (recordHandle_ != 0) return true;
     recordHandle_ = bass_.StartRecord(SAMPLE_RATE, 1, &OVMicCapture::OnRecord, this);
+    if (recordHandle_ != 0 && highPassEnabled_) highPassFx_ = bass_.AddHighPassFilter(recordHandle_, 120.0F);
     return recordHandle_ != 0;
 }
 void OVMicCapture::Stop()
 {
+    if (recordHandle_ != 0 && highPassFx_ != 0) bass_.RemoveFx(recordHandle_, highPassFx_);
+    highPassFx_ = 0;
     if (recordHandle_ != 0) bass_.ChannelFree(recordHandle_);
     recordHandle_ = 0;
     bass_.FreeRecord();
+}
+void OVMicCapture::EnableHighPass(bool enable)
+{
+    highPassEnabled_ = enable;
+    if (recordHandle_ == 0) return;
+    if (!enable && highPassFx_ != 0)
+    {
+        bass_.RemoveFx(recordHandle_, highPassFx_);
+        highPassFx_ = 0;
+    }
+    else if (enable && highPassFx_ == 0) highPassFx_ = bass_.AddHighPassFilter(recordHandle_, 120.0F);
 }
 std::optional<std::vector<std::int16_t>> OVMicCapture::PopFrame() { return frames_.TryPop(); }
 std::vector<float> OVMicCapture::Waveform() const

@@ -36,7 +36,7 @@ public:
     void SetMicrophoneVolume(float volume);
     bool SetInputDevice(int device);
     void EnableSmoothing(bool enable) noexcept;
-    void EnableHighPass(bool enable) noexcept { highPassEnabled_ = enable; }
+    void EnableHighPass(bool enable) noexcept;
     void EnableNoiseSuppression(bool enable) noexcept { noiseSuppressionEnabled_ = enable; }
     void EnableAGC(bool enable) noexcept { agc_.SetEnabled(enable); }
     void SetTransmitting(bool transmitting) noexcept { transmitting_ = transmitting; }

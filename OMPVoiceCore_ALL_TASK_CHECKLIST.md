@@ -732,7 +732,7 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Client
 
-- [ ] Hold PTT for 10 minutes
+- [x] Hold PTT for 10 minutes (`ov_client_soak_tests --mode=ptt --duration=600`: 30,010 frames round-trip, 261->256 handles)
 - [ ] ALT+TAB spam 50 times
 - [x] Change microphone while connected (`ov_connected_device_switch_tests`: live BASS capture + UDP heartbeat + rollback)
 - [x] Disconnect network cable simulation

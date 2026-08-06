@@ -17,6 +17,10 @@
 #include <memory>
 #include <thread>
 
+#if defined(_M_IX86)
+#pragma comment(linker, "/EXPORT:OV_Shutdown=_OV_Shutdown@4")
+#endif
+
 namespace ov::client
 {
 class ClientRuntime final
@@ -132,32 +136,46 @@ private:
     std::shared_ptr<OVDx9Renderer> renderer_;
 };
 
-std::unique_ptr<ClientRuntime> g_runtime;
 std::atomic_bool g_processAttached{};
+HANDLE g_runtimeThread{};
 
 DWORD WINAPI RuntimeThread(void*)
 {
-    g_runtime = std::make_unique<ClientRuntime>();
-    g_runtime->Initialize();
+    ClientRuntime runtime;
+    runtime.Initialize();
     while (g_processAttached) Sleep(100);
-    g_runtime->Shutdown();
-    g_runtime.reset();
+    runtime.Shutdown();
     return 0;
 }
 }
 
-BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID)
+extern "C" __declspec(dllexport) BOOL WINAPI OV_Shutdown(DWORD timeoutMs)
+{
+    ov::client::g_processAttached = false;
+    HANDLE thread = ov::client::g_runtimeThread;
+    if (!thread) return TRUE;
+    const DWORD result = WaitForSingleObject(thread, timeoutMs);
+    if (result != WAIT_OBJECT_0) return FALSE;
+    CloseHandle(thread);
+    ov::client::g_runtimeThread = nullptr;
+    return TRUE;
+}
+
+BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID reserved)
 {
     if (reason == DLL_PROCESS_ATTACH)
     {
         DisableThreadLibraryCalls(module);
         ov::client::g_processAttached = true;
-        HANDLE thread = CreateThread(nullptr, 0, &ov::client::RuntimeThread, nullptr, 0, nullptr);
-        if (thread) CloseHandle(thread);
+        ov::client::g_runtimeThread = CreateThread(nullptr, 0, &ov::client::RuntimeThread, nullptr, 0, nullptr);
+        if (!ov::client::g_runtimeThread) ov::client::g_processAttached = false;
     }
     else if (reason == DLL_PROCESS_DETACH)
     {
         ov::client::g_processAttached = false;
+        // Waiting here can deadlock on the loader lock. A loader that supports
+        // dynamic unload must call OV_Shutdown before FreeLibrary.
+        if (reserved != nullptr) ov::client::g_runtimeThread = nullptr;
     }
     return TRUE;
 }

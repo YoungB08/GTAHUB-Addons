@@ -124,7 +124,7 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 - [x] `DllMain`
 - [x] Threaded initialization
 - [x] Safe shutdown
-- [ ] Unload support
+- [x] Unload support
 
 ## SA:MP detection
 

@@ -20,3 +20,7 @@
 
 The game client and open.mp server must be allowed to send UDP traffic on port
 7775. `/ovdiag` writes a diagnostic report under `ompvoice/debug`.
+
+ASI loaders that unload modules dynamically must call the exported
+`OV_Shutdown(10000)` function and require a nonzero result before calling
+`FreeLibrary`. Process termination uses the nonblocking `DllMain` fallback.

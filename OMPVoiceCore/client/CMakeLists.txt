@@ -82,6 +82,11 @@ if(BUILD_TESTING)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${OV_BASS_ROOT}/bass.dll" "$<TARGET_FILE_DIR:ov_bass_runtime_tests>/bass.dll"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${OV_BASS_FX_ROOT}/bass_fx.dll" "$<TARGET_FILE_DIR:ov_bass_runtime_tests>/bass_fx.dll")
     add_test(NAME ov_bass_runtime_tests COMMAND ov_bass_runtime_tests)
+    add_executable(ov_client_lifecycle_tests tests/OVClientLifecycleTests.cpp)
+    add_dependencies(ov_client_lifecycle_tests ov_client)
+    add_test(NAME ov_client_lifecycle_tests COMMAND ov_client_lifecycle_tests "$<TARGET_FILE:ov_client>")
+    set_tests_properties(ov_client_lifecycle_tests PROPERTIES RUN_SERIAL TRUE TIMEOUT 30
+        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/bin/ompvoice")
     add_executable(ov_settings_state_tests tests/OVSettingsStateTests.cpp)
     target_include_directories(ov_settings_state_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/..")
     add_test(NAME ov_settings_state_tests COMMAND ov_settings_state_tests)

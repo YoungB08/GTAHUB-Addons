@@ -56,7 +56,7 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 ## MinHook
 
 - [x] Compile static
-- [ ] Hook test thành công
+- [x] Hook test thành công
 
 ## JSON
 

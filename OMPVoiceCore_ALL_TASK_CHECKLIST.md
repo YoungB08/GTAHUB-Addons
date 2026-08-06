@@ -734,7 +734,7 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 - [ ] Hold PTT for 10 minutes
 - [ ] ALT+TAB spam 50 times
-- [ ] Change microphone while connected
+- [x] Change microphone while connected (`ov_connected_device_switch_tests`: live BASS capture + UDP heartbeat + rollback)
 - [x] Disconnect network cable simulation
 
 ## Server

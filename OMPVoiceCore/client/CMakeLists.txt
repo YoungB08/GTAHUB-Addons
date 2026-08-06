@@ -115,6 +115,31 @@ if(BUILD_TESTING)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${OV_BASS_ROOT}/bass.dll" "$<TARGET_FILE_DIR:ov_debug_modes_tests>/bass.dll"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${OV_BASS_FX_ROOT}/bass_fx.dll" "$<TARGET_FILE_DIR:ov_debug_modes_tests>/bass_fx.dll")
     add_test(NAME ov_debug_modes_tests COMMAND ov_debug_modes_tests)
+    add_executable(ov_connected_device_switch_tests
+        tests/OVConnectedDeviceSwitchTests.cpp
+        audio/OVAudioEngine.cpp
+        audio/OVBassApi.cpp
+        audio/OVMicCapture.cpp
+        audio/OVOpusEncoder.cpp
+        audio/OVOpusDecoder.cpp
+        audio/OVPlaybackManager.cpp
+        audio/OVJitterBuffer.cpp
+        audio/OVNoiseGate.cpp
+        audio/OVHighPassFilter.cpp
+        audio/OVAutomaticGain.cpp
+        network/OVNetworkClient.cpp
+        ../server/channels/OVChannelManager.cpp
+        ../server/voice/OVUdpServer.cpp
+        ../server/voice/OVVoiceServer.cpp)
+    target_include_directories(ov_connected_device_switch_tests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/..")
+    target_link_libraries(ov_connected_device_switch_tests PRIVATE ov_shared opus winmm ws2_32
+        "${OV_BASS_ROOT}/c/bass.lib" "${OV_BASS_FX_ROOT}/C/bass_fx.lib")
+    add_custom_command(TARGET ov_connected_device_switch_tests POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${OV_BASS_ROOT}/bass.dll" "$<TARGET_FILE_DIR:ov_connected_device_switch_tests>/bass.dll"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${OV_BASS_FX_ROOT}/bass_fx.dll" "$<TARGET_FILE_DIR:ov_connected_device_switch_tests>/bass_fx.dll")
+    add_test(NAME ov_connected_device_switch_tests COMMAND ov_connected_device_switch_tests)
+    set_tests_properties(ov_connected_device_switch_tests PROPERTIES RUN_SERIAL TRUE TIMEOUT 30)
     add_executable(ov_dx9_resource_tests
         tests/OVDx9ResourceTests.cpp
         render/OVResourceManager.cpp

@@ -35,7 +35,12 @@ void OVAudioEngine::Shutdown()
 }
 bool OVAudioEngine::StartCapture()
 {
-    if (!initialized_ || !capture_.Initialize(inputDevice_) || !capture_.Start()) return false;
+    if (!initialized_ || !capture_.Initialize(inputDevice_)) return false;
+    if (!capture_.Start())
+    {
+        capture_.Stop();
+        return false;
+    }
     if (!running_.exchange(true)) audioThread_ = std::thread(&OVAudioEngine::ProcessLoop, this);
     OV_LOG_INFO("Audio", "Capture started at %u Hz, 16-bit mono", SAMPLE_RATE);
     return true;
@@ -51,10 +56,20 @@ void OVAudioEngine::EnableHighPass(bool enable) noexcept { highPassEnabled_ = en
 void OVAudioEngine::SetMicrophoneVolume(float volume) { microphoneVolume_ = std::clamp(volume, 0.0F, 2.0F); }
 bool OVAudioEngine::SetInputDevice(int device)
 {
-    inputDevice_ = device;
-    if (!capture_.IsCapturing()) return true;
+    if (device == inputDevice_) return true;
+    const int previousDevice = inputDevice_;
+    if (!capture_.IsCapturing())
+    {
+        inputDevice_ = device;
+        return true;
+    }
     StopCapture();
-    return StartCapture();
+    inputDevice_ = device;
+    if (StartCapture()) return true;
+    inputDevice_ = previousDevice;
+    if (!StartCapture())
+        OV_LOG_ERROR("Audio", "Input device switch failed and the previous device could not be restored");
+    return false;
 }
 void OVAudioEngine::SetFrameHandler(EncodedFrameHandler handler) { std::lock_guard<std::mutex> lock(handlerMutex_); frameHandler_ = std::move(handler); }
 void OVAudioEngine::OnRemoteFrame(VoiceFrame frame) { remoteQueue_.Push(std::move(frame)); }

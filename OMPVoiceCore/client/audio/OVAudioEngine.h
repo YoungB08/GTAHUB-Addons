@@ -47,6 +47,7 @@ public:
     void Update();
     bool InjectDebugCaptureFrame(std::vector<std::int16_t> pcm);
     [[nodiscard]] bool IsCapturing() const noexcept { return capture_.IsCapturing(); }
+    [[nodiscard]] int InputDevice() const noexcept { return inputDevice_; }
     [[nodiscard]] float MicRms() const noexcept { return capture_.Rms(); }
     [[nodiscard]] float MicPeak() const noexcept { return capture_.Peak(); }
     [[nodiscard]] std::vector<float> MicWaveform() const { return capture_.Waveform(); }

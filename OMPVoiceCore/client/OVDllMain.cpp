@@ -1,0 +1,125 @@
+#include "audio/OVAudioEngine.h"
+#include "audio/OVBassApi.h"
+#include "config/OVClientConfig.h"
+#include "debug/OVDiagnostic.h"
+#include "hooks/OVGameHooks.h"
+#include "network/OVNetworkClient.h"
+#include "render/OVDx9Renderer.h"
+#include "shared/OVLogger.h"
+
+#include <Windows.h>
+
+#include <atomic>
+#include <chrono>
+#include <memory>
+#include <thread>
+
+namespace ov::client
+{
+class ClientRuntime final
+{
+public:
+    bool Initialize()
+    {
+        Logger::Instance().Initialize(std::filesystem::path("ompvoice") / "logs", "client.log", "Client");
+        config_.Load();
+        hooks_.Initialize();
+        diagnostic_ = std::make_unique<OVDiagnostic>();
+        renderer_ = std::make_unique<OVDx9Renderer>(config_, audio_, bass_, *diagnostic_);
+        audio_.SetFrameHandler([this](std::vector<std::uint8_t> encoded) {
+            VoiceFrame frame;
+            frame.playerId = playerId_;
+            frame.channelId = 1;
+            frame.sequence = sequence_++;
+            frame.timestampMs = static_cast<std::uint32_t>(GetTickCount());
+            frame.encoded = std::move(encoded);
+            network_.SendVoiceFrame(std::move(frame));
+        });
+        network_.Configure("127.0.0.1", OMPVOICE_PORT, playerId_);
+        network_.SetFrameHandler([this](VoiceFrame frame) { audio_.OnRemoteFrame(std::move(frame)); });
+        network_.Start();
+        audio_.Initialize();
+        running_ = true;
+        worker_ = std::thread(&ClientRuntime::Loop, this);
+        OV_LOG_INFO("Component", "ov_client.asi initialized for SA:MP 0.3.DL R1/open.mp");
+        return true;
+    }
+    void Shutdown()
+    {
+        if (!running_.exchange(false)) return;
+        if (worker_.joinable()) worker_.join();
+        audio_.Shutdown();
+        network_.Stop();
+        hooks_.Shutdown();
+        renderer_.reset();
+        config_.Save();
+        Logger::Instance().Shutdown();
+    }
+
+private:
+    void Loop()
+    {
+        bool transmitting = false;
+        while (running_)
+        {
+            hooks_.PollHotkeys();
+            if (hooks_.IsSettingsPressed() && renderer_) renderer_->ToggleSettings();
+            if (hooks_.IsDebugPressed() && renderer_) renderer_->SetOverlayVisible(!config_.Values().debug.showOverlay);
+            const bool shouldTransmit = hooks_.IsKeyDown(config_.Values().talkKey) && config_.Values().sound.enabled && config_.Values().microphone.enabled && !config_.Values().microphone.muted;
+            if (shouldTransmit != transmitting)
+            {
+                transmitting = shouldTransmit;
+                audio_.SetTransmitting(transmitting);
+                if (transmitting) network_.SendVoiceBegin(1); else network_.SendVoiceEnd();
+            }
+            audio_.SetLoopback(hooks_.LoopbackToggled() || config_.Values().debug.loopback);
+            audio_.SetMicrophoneVolume(config_.Values().microphone.gain);
+            audio_.Update();
+            hooks_.ClearEdgeEvents();
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+        if (transmitting) network_.SendVoiceEnd();
+    }
+
+    std::atomic_bool running_{};
+    std::thread worker_;
+    std::uint16_t playerId_{};
+    std::uint16_t sequence_{};
+    OVClientConfig config_;
+    OVBassApi bass_;
+    OVAudioEngine audio_{bass_};
+    OVNetworkClient network_;
+    OVGameHooks hooks_;
+    std::unique_ptr<OVDiagnostic> diagnostic_;
+    std::unique_ptr<OVDx9Renderer> renderer_;
+};
+
+std::unique_ptr<ClientRuntime> g_runtime;
+std::atomic_bool g_processAttached{};
+
+DWORD WINAPI RuntimeThread(void*)
+{
+    g_runtime = std::make_unique<ClientRuntime>();
+    g_runtime->Initialize();
+    while (g_processAttached) Sleep(100);
+    g_runtime->Shutdown();
+    g_runtime.reset();
+    return 0;
+}
+}
+
+BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID)
+{
+    if (reason == DLL_PROCESS_ATTACH)
+    {
+        DisableThreadLibraryCalls(module);
+        ov::client::g_processAttached = true;
+        HANDLE thread = CreateThread(nullptr, 0, &ov::client::RuntimeThread, nullptr, 0, nullptr);
+        if (thread) CloseHandle(thread);
+    }
+    else if (reason == DLL_PROCESS_DETACH)
+    {
+        ov::client::g_processAttached = false;
+    }
+    return TRUE;
+}

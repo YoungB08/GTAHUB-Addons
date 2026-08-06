@@ -121,14 +121,14 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## ASI loader
 
-- [ ] `DllMain`
-- [ ] Threaded initialization
-- [ ] Safe shutdown
+- [x] `DllMain`
+- [x] Threaded initialization
+- [x] Safe shutdown
 - [ ] Unload support
 
 ## SA:MP detection
 
-- [ ] `samp.dll` detect
+- [x] `samp.dll` detect
 - [ ] 0.3.DL R1 detect
 - [ ] Version fallback
 - [ ] Error message nếu unsupported
@@ -172,10 +172,10 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Fallback
 
-- [ ] Missing file detection
-- [ ] Error logging
-- [ ] Placeholder texture create
-- [ ] Continue running without crash
+- [x] Missing file detection
+- [x] Error logging
+- [x] Placeholder texture create
+- [x] Continue running without crash
 
 ---
 
@@ -201,17 +201,17 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Format
 
-- [ ] 48000 Hz
-- [ ] 16-bit PCM
-- [ ] Mono
-- [ ] 20 ms frame
+- [x] 48000 Hz
+- [x] 16-bit PCM
+- [x] Mono
+- [x] 20 ms frame
 
 ## Processing
 
-- [ ] RMS calculation
-- [ ] Peak calculation
-- [ ] Buffer queue
-- [ ] Overflow protection
+- [x] RMS calculation
+- [x] Peak calculation
+- [x] Buffer queue
+- [x] Overflow protection
 
 ---
 
@@ -219,17 +219,17 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Input
 
-- [ ] Default key Z
-- [ ] Rebind support
+- [x] Default key Z
+- [x] Rebind support
 - [ ] Key capture UI
 - [ ] Hold-to-talk stable
 
 ## State machine
 
-- [ ] Idle
-- [ ] Pressed
-- [ ] Transmitting
-- [ ] Released
+- [x] Idle
+- [x] Pressed
+- [x] Transmitting
+- [x] Released
 - [ ] Timeout recovery
 
 ---
@@ -245,8 +245,8 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## UI
 
-- [ ] Enable checkbox
-- [ ] Threshold slider
+- [x] Enable checkbox
+- [x] Threshold slider
 - [ ] Live level meter
 
 ---
@@ -255,32 +255,32 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Master volume
 
-- [ ] Slider 0–100
-- [ ] Real BASS volume apply
-- [ ] Save config
+- [x] Slider 0–100
+- [x] Real BASS volume apply
+- [x] Save config
 
 ## Microphone gain
 
-- [ ] Gain multiplier
-- [ ] No clipping at 200%
-- [ ] Real-time update
+- [x] Gain multiplier
+- [x] No clipping at 200%
+- [x] Real-time update
 
 ## High-pass filter
 
 - [ ] BASS FX create
-- [ ] 120 Hz cutoff
-- [ ] Toggle on/off
+- [x] 120 Hz cutoff
+- [x] Toggle on/off
 
 ## Noise gate
 
-- [ ] Silence detection
-- [ ] Packet suppression
-- [ ] Adjustable threshold
+- [x] Silence detection
+- [x] Packet suppression
+- [x] Adjustable threshold
 
 ## AGC
 
-- [ ] Automatic gain adjust
-- [ ] Stable target RMS
+- [x] Automatic gain adjust
+- [x] Stable target RMS
 - [ ] No pumping artifacts
 
 ---
@@ -289,18 +289,18 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Initialization
 
-- [ ] Encoder create
-- [ ] Bitrate 24000
-- [ ] Complexity 5
-- [ ] DTX enabled
-- [ ] FEC enabled
+- [x] Encoder create
+- [x] Bitrate 24000
+- [x] Complexity 5
+- [x] DTX enabled
+- [x] FEC enabled
 
 ## Encode path
 
-- [ ] PCM → Opus
-- [ ] Frame size correct
-- [ ] Buffer reuse
-- [ ] Error handling
+- [x] PCM → Opus
+- [x] Frame size correct
+- [x] Buffer reuse
+- [x] Error handling
 
 ---
 
@@ -308,15 +308,15 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Initialization
 
-- [ ] Decoder create
-- [ ] 48 kHz config
+- [x] Decoder create
+- [x] 48 kHz config
 
 ## Decode path
 
-- [ ] Opus → PCM
-- [ ] PLC support
-- [ ] Corrupted packet handling
-- [ ] Stream reset support
+- [x] Opus → PCM
+- [x] PLC support
+- [x] Corrupted packet handling
+- [x] Stream reset support
 
 ---
 
@@ -344,18 +344,18 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Handshake
 
-- [ ] Client send handshake
+- [x] Client send handshake
 - [x] Server validate magic
 - [x] Version validation
 - [x] UID validation
 
 ## Reconnect
 
-- [ ] Detect disconnect
-- [ ] Retry 1s
-- [ ] Retry 3s
-- [ ] Retry 5s
-- [ ] Retry 10s
+- [x] Detect disconnect
+- [x] Retry 1s
+- [x] Retry 3s
+- [x] Retry 5s
+- [x] Retry 10s
 
 ---
 
@@ -363,14 +363,14 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Queue
 
-- [ ] Sequence ordering
-- [ ] Duplicate packet ignore
-- [ ] Late packet handling
-- [ ] Buffer underrun handling
+- [x] Sequence ordering
+- [x] Duplicate packet ignore
+- [x] Late packet handling
+- [x] Buffer underrun handling
 
 ## Playback
 
-- [ ] 40 ms target
+- [x] 40 ms target
 - [ ] Smooth playback
 - [ ] No stutter under 5% loss
 
@@ -483,16 +483,16 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## States
 
-- [ ] Passive icon
-- [ ] Active icon
-- [ ] Muted icon
+- [x] Passive icon
+- [x] Active icon
+- [x] Muted icon
 
 ## Position
 
-- [ ] Bottom-center default
-- [ ] Scale slider
-- [ ] X offset
-- [ ] Y offset
+- [x] Bottom-center default
+- [x] Scale slider
+- [x] X offset
+- [x] Y offset
 - [ ] Drag & drop move mode
 
 ---
@@ -519,37 +519,37 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## General tab
 
-- [ ] Enable sound
-- [ ] Master volume
-- [ ] Smoothing
-- [ ] High-pass filter
-- [ ] Noise suppression
-- [ ] AGC
-- [ ] Speaker icon options
+- [x] Enable sound
+- [x] Master volume
+- [x] Smoothing
+- [x] High-pass filter
+- [x] Noise suppression
+- [x] AGC
+- [x] Speaker icon options
 
 ## Microphone tab
 
-- [ ] Enable microphone
+- [x] Enable microphone
 - [ ] Input device combo
-- [ ] Mic volume slider
-- [ ] Test microphone
-- [ ] HUD icon controls
+- [x] Mic volume slider
+- [x] Test microphone
+- [x] HUD icon controls
 
 ## Black list tab
 
-- [ ] Search field
+- [x] Search field
 - [ ] Online players list
-- [ ] Mute toggle
-- [ ] Save blacklist
+- [x] Mute toggle
+- [x] Save blacklist
 
 ## Debug tab
 
-- [ ] Loopback toggle
-- [ ] Mirror mode toggle
-- [ ] Fake remote toggle
-- [ ] Packet simulator controls
-- [ ] Oscilloscope
-- [ ] Diagnostic button
+- [x] Loopback toggle
+- [x] Mirror mode toggle
+- [x] Fake remote toggle
+- [x] Packet simulator controls
+- [x] Oscilloscope
+- [x] Diagnostic button
 
 ---
 
@@ -557,10 +557,10 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Loopback mode (F8)
 
-- [ ] Encode local voice
-- [ ] Decode locally
-- [ ] Hear own processed voice
-- [ ] No network required
+- [x] Encode local voice
+- [x] Decode locally
+- [x] Hear own processed voice
+- [x] No network required
 
 ## Mirror mode
 
@@ -578,24 +578,24 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Packet simulator
 
-- [ ] Packet loss slider
-- [ ] Latency slider
-- [ ] Jitter slider
+- [x] Packet loss slider
+- [x] Latency slider
+- [x] Jitter slider
 - [ ] Real packet dropping
 
 ## Oscilloscope
 
 - [ ] Waveform display
-- [ ] RMS graph
+- [x] RMS graph
 - [ ] Peak meter
-- [ ] Update in real time
+- [x] Update in real time
 
 ## Diagnostic command
 
 - [ ] `/ovdiag`
-- [ ] Generate text report
-- [ ] Check all subsystems
-- [ ] Save to `debug/diagnostic_report.txt`
+- [x] Generate text report
+- [x] Check all subsystems
+- [x] Save to `debug/diagnostic_report.txt`
 
 ---
 
@@ -610,10 +610,10 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Features
 
-- [ ] Timestamp
-- [ ] Thread name
-- [ ] Log level
-- [ ] File rotation
+- [x] Timestamp
+- [x] Thread name
+- [x] Log level
+- [x] File rotation
 
 ---
 
@@ -628,9 +628,9 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Assertions
 
-- [ ] `OV_ASSERT`
-- [ ] Debug break in Debug build
-- [ ] Error log in Release build
+- [x] `OV_ASSERT`
+- [x] Debug break in Debug build
+- [x] Error log in Release build
 
 ---
 
@@ -638,16 +638,16 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Audio thread
 
-- [ ] Capture
-- [ ] Encode
-- [ ] Decode
-- [ ] Jitter processing
+- [x] Capture
+- [x] Encode
+- [x] Decode
+- [x] Jitter processing
 
 ## Network thread
 
-- [ ] UDP receive
-- [ ] Packet queue
-- [ ] Reconnect logic
+- [x] UDP receive
+- [x] Packet queue
+- [x] Reconnect logic
 
 ## Render thread
 
@@ -667,9 +667,9 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## RAII
 
-- [ ] `std::unique_ptr`
+- [x] `std::unique_ptr`
 - [ ] `std::shared_ptr`
-- [ ] Custom handle wrappers
+- [x] Custom handle wrappers
 
 ## Leak checks
 
@@ -750,12 +750,12 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Files
 
-- [ ] `ompvoice.dll`
-- [ ] `ov_client.asi`
-- [ ] `ompvoice.inc`
+- [x] `ompvoice.dll`
+- [x] `ov_client.asi`
+- [x] `ompvoice.inc`
 - [ ] `bass.dll`
 - [ ] `bass_fx.dll`
-- [ ] `README.md`
+- [x] `README.md`
 - [ ] `INSTALL.md`
 - [ ] `CHANGELOG.md`
 

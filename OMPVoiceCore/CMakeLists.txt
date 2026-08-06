@@ -72,6 +72,36 @@ endif()
 
 if(OV_BUILD_CLIENT)
     if(WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 4)
+        if(OV_FETCH_DEPENDENCIES)
+            FetchContent_Declare(
+                opus
+                GIT_REPOSITORY https://github.com/xiph/opus.git
+                GIT_TAG v1.5.2
+                GIT_SHALLOW TRUE)
+            set(OPUS_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+            set(OPUS_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
+            set(OV_BUILD_TESTING_SAVED "${BUILD_TESTING}")
+            set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+            FetchContent_MakeAvailable(opus)
+            set(BUILD_TESTING "${OV_BUILD_TESTING_SAVED}" CACHE BOOL "" FORCE)
+
+            FetchContent_Declare(
+                imgui
+                GIT_REPOSITORY https://github.com/ocornut/imgui.git
+                GIT_TAG v1.91.9b
+                GIT_SHALLOW TRUE)
+            FetchContent_GetProperties(imgui)
+            if(NOT imgui_POPULATED)
+                FetchContent_Populate(imgui)
+            endif()
+
+            FetchContent_Declare(
+                minhook
+                GIT_REPOSITORY https://github.com/TsudaKageyu/minhook.git
+                GIT_TAG v1.3.4
+                GIT_SHALLOW TRUE)
+            FetchContent_MakeAvailable(minhook)
+        endif()
         add_subdirectory(client)
     else()
         message(STATUS "ov_client is Win32-only; the server and tests remain available on this platform")

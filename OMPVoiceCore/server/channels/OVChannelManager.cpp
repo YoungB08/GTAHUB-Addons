@@ -99,6 +99,16 @@ bool OVChannelManager::LeaveRadio(int playerId, std::uint32_t channelId)
     const auto it = players_.find(playerId);
     return it != players_.end() && it->second.radioChannels.erase(channelId) != 0;
 }
+void OVChannelManager::SetPhoneLeakRadius(float radius)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    phoneLeakRadius_ = std::clamp(radius, 5.0F, 10.0F);
+}
+float OVChannelManager::PhoneLeakRadius() const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return phoneLeakRadius_;
+}
 
 std::vector<VoiceRecipient> OVChannelManager::Recipients(int sourceId, std::uint32_t channelId) const
 {
@@ -116,11 +126,15 @@ std::vector<VoiceRecipient> OVChannelManager::Recipients(int sourceId, std::uint
         VoiceMode deliveryMode = channel.mode;
         const float distance = sourceIt->second.position.DistanceTo(listener.position);
         const bool phoneParticipant = listener.phoneTarget == sourceId || sourceIt->second.phoneTarget == id;
-        const bool phoneLeak = sourceIt->second.phoneTarget != -1 && distance <= PHONE_LEAK_RADIUS;
+        const bool phoneLeak = sourceIt->second.phoneTarget != -1 && distance <= phoneLeakRadius_;
         const bool sameVehicle = sourceIt->second.vehicleId >= 0 && sourceIt->second.vehicleId == listener.vehicleId;
         const bool sameRadio = channel.mode == VoiceMode::Radio && listener.radioChannels.count(channelId) != 0 && sourceIt->second.radioChannels.count(channelId) != 0;
-        if (phoneParticipant) { gain = 1.0F; deliveryMode = VoiceMode::Phone; }
-        else if (phoneLeak) { gain = 0.30F * std::max(0.0F, 1.0F - distance / PHONE_LEAK_RADIUS); deliveryMode = VoiceMode::Phone; }
+        if (sourceIt->second.phoneTarget != -1)
+        {
+            if (phoneParticipant) { gain = 1.0F; deliveryMode = VoiceMode::Phone; }
+            else if (phoneLeak) { gain = 0.30F * std::max(0.0F, 1.0F - distance / phoneLeakRadius_); deliveryMode = VoiceMode::Phone; }
+            else continue;
+        }
         else if (channel.mode == VoiceMode::Global) gain = 1.0F;
         else if (sameVehicle) { gain = 1.0F; deliveryMode = VoiceMode::Vehicle; }
         else if (channel.mode == VoiceMode::Radio && sameRadio) { gain = 1.0F; deliveryMode = VoiceMode::Radio; }

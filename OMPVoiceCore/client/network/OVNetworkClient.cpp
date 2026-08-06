@@ -72,6 +72,8 @@ bool OVNetworkClient::Start()
     running_ = true;
     retryIndex_ = 0;
     nextRetry_ = std::chrono::steady_clock::now();
+    lastReceive_ = std::chrono::steady_clock::now();
+    nextPing_ = lastReceive_ + std::chrono::seconds(2);
     thread_ = std::thread(&OVNetworkClient::ReceiveLoop, this);
     return true;
 }
@@ -115,7 +117,6 @@ void OVNetworkClient::TryReconnect()
     const auto handshake = SerializeHandshake(Handshake{});
     if (Send(handshake))
     {
-        retryIndex_ = 0;
         OV_LOG_INFO("Network", "Handshake sent to %s:%u", host_.c_str(), port_);
     }
     const std::array<int, 4> retrySeconds{1, 3, 5, 10};
@@ -127,6 +128,19 @@ void OVNetworkClient::ReceiveLoop()
     std::array<std::uint8_t, 2048> buffer{};
     while (running_)
     {
+        const auto now = std::chrono::steady_clock::now();
+        if (connected_ && now - lastReceive_ > std::chrono::seconds(5))
+        {
+            connected_ = false;
+            retryIndex_ = 0;
+            nextRetry_ = now;
+            OV_LOG_WARN("Network", "Voice server timed out; reconnecting");
+        }
+        if (connected_ && now >= nextPing_)
+        {
+            Send(SerializeControl(OVPacket::Ping));
+            nextPing_ = now + std::chrono::seconds(2);
+        }
         TryReconnect();
 #ifdef _WIN32
         fd_set readSet; FD_ZERO(&readSet); FD_SET(static_cast<SOCKET>(socket_), &readSet);
@@ -142,7 +156,14 @@ void OVNetworkClient::ReceiveLoop()
         ++receivedPackets_;
         const auto packet = DecodeDatagram(buffer.data(), static_cast<std::size_t>(received));
         if (!packet) continue;
-        if (packet->type == OVPacket::Pong) { connected_ = true; continue; }
+        lastReceive_ = std::chrono::steady_clock::now();
+        if (packet->type == OVPacket::Pong)
+        {
+            connected_ = true;
+            retryIndex_ = 0;
+            nextPing_ = lastReceive_ + std::chrono::seconds(2);
+            continue;
+        }
         if (packet->type != OVPacket::VoiceData) continue;
         const auto frame = ParseVoiceFrame(std::vector<std::uint8_t>(buffer.begin(), buffer.begin() + received));
         if (!frame) continue;

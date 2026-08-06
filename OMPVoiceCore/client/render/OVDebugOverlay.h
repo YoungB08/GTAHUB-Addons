@@ -28,11 +28,14 @@ public:
     void SetVisible(bool visible) noexcept { visible_ = visible; }
     void SetStats(DebugStats stats) noexcept { stats_ = stats; }
     void AddRms(float rms);
+    void SetWaveform(std::vector<float> waveform, float peak);
     void Render();
 
 private:
     bool visible_{true};
     DebugStats stats_;
     std::vector<float> rmsHistory_;
+    std::vector<float> waveform_;
+    float micPeak_{};
 };
 }

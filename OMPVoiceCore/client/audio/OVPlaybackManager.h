@@ -18,6 +18,7 @@ public:
     void Shutdown();
     void PushMono(const std::vector<std::int16_t>& pcm, float gain, float pan);
     void SetMasterVolume(float volume);
+    void SetSmoothing(bool enabled) noexcept;
     [[nodiscard]] bool IsReady() const noexcept { return stream_ != 0; }
 
 private:
@@ -28,5 +29,7 @@ private:
     std::vector<std::int16_t> queue_;
     std::size_t readOffset_{};
     float masterVolume_{0.32F};
+    float currentVolume_{0.32F};
+    bool smoothing_{true};
 };
 }

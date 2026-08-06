@@ -3,8 +3,11 @@
 #include "OVBassApi.h"
 #include "shared/OVThreadQueue.h"
 
+#include <array>
+#include <atomic>
 #include <cstdint>
 #include <functional>
+#include <mutex>
 #include <optional>
 #include <vector>
 
@@ -21,15 +24,18 @@ public:
     void Stop();
     [[nodiscard]] std::optional<std::vector<std::int16_t>> PopFrame();
     [[nodiscard]] bool IsCapturing() const noexcept { return recordHandle_ != 0; }
-    [[nodiscard]] float Rms() const noexcept { return rms_; }
-    [[nodiscard]] float Peak() const noexcept { return peak_; }
+    [[nodiscard]] float Rms() const noexcept { return rms_.load(std::memory_order_relaxed); }
+    [[nodiscard]] float Peak() const noexcept { return peak_.load(std::memory_order_relaxed); }
+    [[nodiscard]] std::vector<float> Waveform() const;
 
 private:
     static int OV_BASS_CALL OnRecord(BassHandle handle, const void* buffer, BassDword length, void* user);
     OVBassApi& bass_;
     FrameQueue frames_{32};
     BassHandle recordHandle_{};
-    float rms_{};
-    float peak_{};
+    std::atomic<float> rms_{};
+    std::atomic<float> peak_{};
+    mutable std::mutex waveformMutex_;
+    std::array<float, 128> waveform_{};
 };
 }

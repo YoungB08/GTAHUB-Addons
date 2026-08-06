@@ -45,6 +45,8 @@ private:
     std::mutex callbackMutex_;
     FrameHandler frameHandler_;
     std::chrono::steady_clock::time_point nextRetry_{};
+    std::chrono::steady_clock::time_point nextPing_{};
+    std::chrono::steady_clock::time_point lastReceive_{};
     std::size_t retryIndex_{};
     std::atomic_uint32_t sentPackets_{};
     std::atomic_uint32_t receivedPackets_{};

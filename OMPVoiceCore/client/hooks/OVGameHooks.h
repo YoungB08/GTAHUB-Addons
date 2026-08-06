@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <memory>
 
 namespace ov::client
 {
@@ -10,7 +11,7 @@ class OVGameHooks final
 {
 public:
     bool Initialize();
-    bool InstallDx9Hooks(OVDx9Renderer* renderer);
+    bool InstallDx9Hooks(const std::shared_ptr<OVDx9Renderer>& renderer);
     void Shutdown();
     [[nodiscard]] bool IsSupportedClient() const noexcept { return supported_; }
     [[nodiscard]] bool IsKeyDown(int virtualKey) const noexcept;

@@ -35,7 +35,7 @@ public:
     void SetMasterVolume(float volume);
     void SetMicrophoneVolume(float volume);
     bool SetInputDevice(int device);
-    void EnableSmoothing(bool enable) noexcept { smoothing_ = enable; }
+    void EnableSmoothing(bool enable) noexcept;
     void EnableHighPass(bool enable) noexcept { highPassEnabled_ = enable; }
     void EnableNoiseSuppression(bool enable) noexcept { noiseSuppressionEnabled_ = enable; }
     void EnableAGC(bool enable) noexcept { agc_.SetEnabled(enable); }
@@ -48,6 +48,8 @@ public:
     [[nodiscard]] bool IsCapturing() const noexcept { return capture_.IsCapturing(); }
     [[nodiscard]] float MicRms() const noexcept { return capture_.Rms(); }
     [[nodiscard]] float MicPeak() const noexcept { return capture_.Peak(); }
+    [[nodiscard]] std::vector<float> MicWaveform() const { return capture_.Waveform(); }
+    [[nodiscard]] bool IsTransmitting() const noexcept { return transmitting_.load(std::memory_order_relaxed); }
     [[nodiscard]] std::size_t RemoteStreamCount() const noexcept { return remoteStreamCount_.load(); }
 
 private:

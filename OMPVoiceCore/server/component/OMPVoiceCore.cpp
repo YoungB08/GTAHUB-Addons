@@ -3,6 +3,7 @@
 #include "server/natives/OVPawnNatives.h"
 #include "shared/OVConstants.h"
 #include "shared/OVCrashSafety.h"
+#include "shared/OVConfig.h"
 #include "shared/OVLogger.h"
 
 #include <Server/Components/Pawn/pawn.hpp>
@@ -47,6 +48,12 @@ void OMPVoiceCore::onLoad(ICore* core)
     ov::CrashSafety::Install(std::filesystem::path("ompvoice") / "debug");
     ov::Logger::Instance().Initialize(std::filesystem::path("ompvoice") / "logs", "server.log", "Server");
     OV_LOG_INFO("Component", "OMPVoiceCore loading; voice port is %u", ov::OMPVOICE_PORT);
+    ov::Config serverConfig;
+    std::string configError;
+    if (ov::ConfigStore(std::filesystem::path("ompvoice") / "config.json").Load(serverConfig, configError))
+        channels_.SetPhoneLeakRadius(serverConfig.phoneLeakRadius);
+    else
+        OV_LOG_WARN("Config", "Server config load used defaults: %s", configError.c_str());
     core_->getEventDispatcher().addEventHandler(this);
     core_->getPlayers().getPlayerConnectDispatcher().addEventHandler(this);
     core_->getPlayers().getPlayerTextDispatcher().addEventHandler(this);
@@ -113,6 +120,18 @@ void OMPVoiceCore::onPlayerDisconnect(IPlayer& player, PeerDisconnectReason)
 bool OMPVoiceCore::onPlayerCommandText(IPlayer&, StringView message)
 {
     const std::string command(message);
+    if (command == "/ovreload")
+    {
+        ov::Config serverConfig;
+        std::string configError;
+        if (ov::ConfigStore(std::filesystem::path("ompvoice") / "config.json").Load(serverConfig, configError))
+        {
+            channels_.SetPhoneLeakRadius(serverConfig.phoneLeakRadius);
+            OV_LOG_INFO("Config", "Reloaded server config; phone leak radius %.2fm", channels_.PhoneLeakRadius());
+        }
+        else OV_LOG_ERROR("Config", "Server config reload failed: %s", configError.c_str());
+        return false;
+    }
     if (command != "/ovdiag") return true;
     std::string output;
     if (!diagnostics_.Run(udpBound_, output)) OV_LOG_ERROR("Debug", "Unable to write diagnostic report");

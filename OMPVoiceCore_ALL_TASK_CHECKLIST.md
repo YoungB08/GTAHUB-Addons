@@ -12,7 +12,7 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 - [x] Tạo Git repository
 - [x] Tạo branch `main`
-- [ ] Tạo branch `dev`
+- [x] Tạo branch `dev`
 - [x] Tạo `.gitignore` cho VS2022 + CMake
 - [x] Tạo `README.md`
 - [x] Tạo `LICENSE`
@@ -221,7 +221,7 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 - [x] Default key Z
 - [x] Rebind support
-- [ ] Key capture UI
+- [x] Key capture UI
 - [ ] Hold-to-talk stable
 
 ## State machine
@@ -230,7 +230,7 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 - [x] Pressed
 - [x] Transmitting
 - [x] Released
-- [ ] Timeout recovery
+- [x] Timeout recovery
 
 ---
 
@@ -247,7 +247,7 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 - [x] Enable checkbox
 - [x] Threshold slider
-- [ ] Live level meter
+- [x] Live level meter
 
 ---
 
@@ -281,7 +281,7 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 - [x] Automatic gain adjust
 - [x] Stable target RMS
-- [ ] No pumping artifacts
+- [x] No pumping artifacts
 
 ---
 
@@ -371,8 +371,8 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 ## Playback
 
 - [x] 40 ms target
-- [ ] Smooth playback
-- [ ] No stutter under 5% loss
+- [x] Smooth playback
+- [x] No stutter under 5% loss
 
 ---
 
@@ -467,7 +467,7 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 ## Leak radius
 
 - [x] Default 8m
-- [ ] Configurable 5–10m
+- [x] Configurable 5–10m
 - [x] Nearby listener hears partial audio
 - [x] Far listener hears nothing
 
@@ -509,9 +509,9 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 ## Visuals
 
 - [x] `speaker.png`
-- [ ] Pulse animation
-- [ ] Scale setting
-- [ ] Offset X/Y setting
+- [x] Pulse animation
+- [x] Scale setting
+- [x] Offset X/Y setting
 
 ---
 
@@ -574,7 +574,7 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 - [x] Spawn fake remote entity
 - [x] Render speaker icon
 - [x] Simulate talking timeout
-- [ ] Test attenuation and pan
+- [x] Test attenuation and pan
 
 ## Packet simulator
 
@@ -585,9 +585,9 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Oscilloscope
 
-- [ ] Waveform display
+- [x] Waveform display
 - [x] RMS graph
-- [ ] Peak meter
+- [x] Peak meter
 - [x] Update in real time
 
 ## Diagnostic command
@@ -659,7 +659,7 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 - [x] No BASS playback from network thread
 - [x] Thread-safe queues
-- [ ] No deadlocks under stress test
+- [x] No deadlocks under stress test
 
 ---
 
@@ -668,7 +668,7 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 ## RAII
 
 - [x] `std::unique_ptr`
-- [ ] `std::shared_ptr`
+- [x] `std::shared_ptr`
 - [x] Custom handle wrappers
 
 ## Leak checks
@@ -698,10 +698,10 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Hot reload
 
-- [ ] `/ovreload`
-- [ ] Runtime apply volume
-- [ ] Runtime apply filters
-- [ ] Runtime apply icon settings
+- [x] `/ovreload`
+- [x] Runtime apply volume
+- [x] Runtime apply filters
+- [x] Runtime apply icon settings
 
 ---
 
@@ -717,13 +717,13 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 - [ ] Average < 8 KB/s per speaker
 - [ ] Stable under 100 ms latency
-- [ ] Stable under 5% packet loss
+- [x] Stable under 5% packet loss
 
 ## Latency
 
 - [ ] Capture < 5 ms
-- [ ] Encode < 2 ms
-- [ ] Decode < 1 ms
+- [x] Encode < 2 ms
+- [x] Decode < 1 ms
 - [ ] End-to-end < 80 ms
 
 ---
@@ -782,9 +782,9 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 ### Audio
 
 - [ ] Capture works
-- [ ] Encode works
-- [ ] Decode works
-- [ ] Effects work
+- [x] Encode works
+- [x] Decode works
+- [x] Effects work
 - [ ] 3D audio works
 
 ### UI

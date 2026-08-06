@@ -9,6 +9,11 @@ void OVDebugOverlay::AddRms(float rms)
     rmsHistory_.push_back(rms);
     if (rmsHistory_.size() > 128) rmsHistory_.erase(rmsHistory_.begin());
 }
+void OVDebugOverlay::SetWaveform(std::vector<float> waveform, float peak)
+{
+    waveform_ = std::move(waveform);
+    micPeak_ = peak;
+}
 void OVDebugOverlay::Render()
 {
     if (!visible_) return;
@@ -27,6 +32,8 @@ void OVDebugOverlay::Render()
     ImGui::Text("Mirror Mode      : %s", stats_.mirrorMode ? "ON" : "OFF");
     ImGui::Text("RTT              : %u ms", stats_.rttMs);
     if (!rmsHistory_.empty()) ImGui::PlotLines("Mic RMS", rmsHistory_.data(), static_cast<int>(rmsHistory_.size()), 0, nullptr, 0.0F, 1.0F, ImVec2(260, 70));
+    if (!waveform_.empty()) ImGui::PlotLines("Waveform", waveform_.data(), static_cast<int>(waveform_.size()), 0, nullptr, 0.0F, 1.0F, ImVec2(260, 70));
+    ImGui::ProgressBar(micPeak_, ImVec2(260, 0), "Peak");
     ImGui::End();
 }
 }

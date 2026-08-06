@@ -13,6 +13,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <memory>
 #include <thread>
 
@@ -28,8 +29,8 @@ public:
         config_.Load();
         hooks_.Initialize();
         diagnostic_ = std::make_unique<OVDiagnostic>();
-        renderer_ = std::make_unique<OVDx9Renderer>(config_, audio_, bass_, *diagnostic_);
-        hooks_.InstallDx9Hooks(renderer_.get());
+        renderer_ = std::make_shared<OVDx9Renderer>(config_, audio_, bass_, *diagnostic_);
+        hooks_.InstallDx9Hooks(renderer_);
         audio_.SetFrameHandler([this](std::vector<std::uint8_t> encoded) {
             VoiceFrame frame;
             frame.playerId = playerId_;
@@ -39,10 +40,17 @@ public:
             frame.encoded = std::move(encoded);
             simulator_.SetPacketLoss(config_.Values().debug.packetLoss);
             if (simulator_.Drop()) return;
-            if (config_.Values().debug.mirrorMode)
+            const bool fakeRemote = fakeRemoteActive_.load(std::memory_order_relaxed);
+            if (mirrorModeActive_.load(std::memory_order_relaxed) || fakeRemote)
             {
                 VoiceFrame mirror = frame;
                 mirror.playerId = 999;
+                if (fakeRemote)
+                {
+                    const float phase = static_cast<float>(GetTickCount64() % 6000U) / 6000.0F * 6.2831853F;
+                    mirror.pan = std::sin(phase) * 0.85F;
+                    mirror.gain = 0.35F + 0.45F * (std::sin(phase * 0.5F) * 0.5F + 0.5F);
+                }
                 audio_.OnRemoteFrame(std::move(mirror));
             }
             network_.SendVoiceFrame(std::move(frame));
@@ -91,7 +99,15 @@ private:
             }
             audio_.SetLoopback(hooks_.LoopbackToggled() || config_.Values().debug.loopback);
             audio_.SetVoiceActivation(config_.Values().sound.voiceActivation, config_.Values().sound.voiceThreshold);
-            if (renderer_) renderer_->SetFakeRemote(hooks_.FakeRemoteToggled() || config_.Values().debug.fakeRemote);
+            const bool fakeRemote = hooks_.FakeRemoteToggled() || config_.Values().debug.fakeRemote;
+            fakeRemoteActive_.store(fakeRemote, std::memory_order_relaxed);
+            mirrorModeActive_.store(config_.Values().debug.mirrorMode, std::memory_order_relaxed);
+            if (renderer_) renderer_->SetFakeRemote(fakeRemote);
+            audio_.SetMasterVolume(config_.Values().sound.masterVolume / 100.0F);
+            audio_.EnableSmoothing(config_.Values().sound.smoothing);
+            audio_.EnableHighPass(config_.Values().sound.highPassFilter);
+            audio_.EnableNoiseSuppression(config_.Values().sound.noiseSuppression);
+            audio_.EnableAGC(config_.Values().sound.automaticGainControl);
             audio_.SetMicrophoneVolume(config_.Values().microphone.gain);
             audio_.Update();
             hooks_.ClearEdgeEvents();
@@ -101,6 +117,8 @@ private:
     }
 
     std::atomic_bool running_{};
+    std::atomic_bool fakeRemoteActive_{};
+    std::atomic_bool mirrorModeActive_{};
     std::thread worker_;
     std::uint16_t playerId_{};
     std::uint16_t sequence_{};
@@ -111,7 +129,7 @@ private:
     OVPacketSimulator simulator_;
     OVGameHooks hooks_;
     std::unique_ptr<OVDiagnostic> diagnostic_;
-    std::unique_ptr<OVDx9Renderer> renderer_;
+    std::shared_ptr<OVDx9Renderer> renderer_;
 };
 
 std::unique_ptr<ClientRuntime> g_runtime;

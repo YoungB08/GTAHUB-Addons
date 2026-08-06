@@ -46,6 +46,7 @@ void OVAudioEngine::StopCapture()
     if (running_.exchange(false) && audioThread_.joinable()) audioThread_.join();
 }
 void OVAudioEngine::SetMasterVolume(float volume) { playback_.SetMasterVolume(std::clamp(volume, 0.0F, 1.0F)); }
+void OVAudioEngine::EnableSmoothing(bool enable) noexcept { smoothing_ = enable; playback_.SetSmoothing(enable); }
 void OVAudioEngine::SetMicrophoneVolume(float volume) { microphoneVolume_ = std::clamp(volume, 0.0F, 2.0F); }
 bool OVAudioEngine::SetInputDevice(int device)
 {

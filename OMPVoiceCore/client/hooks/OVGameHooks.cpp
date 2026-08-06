@@ -7,6 +7,7 @@
 #include <Windows.h>
 #include <cstring>
 #include <d3d9.h>
+#include <memory>
 #include <MinHook.h>
 #include <Psapi.h>
 #endif
@@ -20,20 +21,20 @@ using EndSceneFn = HRESULT(WINAPI*)(IDirect3DDevice9*);
 using ResetFn = HRESULT(WINAPI*)(IDirect3DDevice9*, D3DPRESENT_PARAMETERS*);
 EndSceneFn g_originalEndScene{};
 ResetFn g_originalReset{};
-OVDx9Renderer* g_renderer{};
+std::weak_ptr<OVDx9Renderer> g_renderer;
 void* g_endSceneTarget{};
 void* g_resetTarget{};
 
 HRESULT WINAPI HookEndScene(IDirect3DDevice9* device)
 {
-    if (g_renderer) g_renderer->OnEndScene(device);
+    if (const auto renderer = g_renderer.lock()) renderer->OnEndScene(device);
     return g_originalEndScene ? g_originalEndScene(device) : D3D_OK;
 }
 HRESULT WINAPI HookReset(IDirect3DDevice9* device, D3DPRESENT_PARAMETERS* parameters)
 {
-    if (g_renderer) g_renderer->OnResetBefore();
+    if (const auto renderer = g_renderer.lock()) renderer->OnResetBefore();
     const HRESULT result = g_originalReset ? g_originalReset(device, parameters) : D3D_OK;
-    if (SUCCEEDED(result) && g_renderer) g_renderer->OnResetAfter(device);
+    if (SUCCEEDED(result)) if (const auto renderer = g_renderer.lock()) renderer->OnResetAfter(device);
     return result;
 }
 LRESULT CALLBACK DummyWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
@@ -69,7 +70,7 @@ bool OVGameHooks::Initialize()
     if (!supported_) OV_LOG_ERROR("Hooks", "Unsupported client: SA:MP 0.3.DL R1/open.mp module not detected");
     return true;
 }
-bool OVGameHooks::InstallDx9Hooks(OVDx9Renderer* renderer)
+bool OVGameHooks::InstallDx9Hooks(const std::shared_ptr<OVDx9Renderer>& renderer)
 {
 #ifdef _WIN32
     if (dx9Hooked_) return true;
@@ -128,7 +129,7 @@ void OVGameHooks::Shutdown()
         if (g_endSceneTarget) MH_RemoveHook(g_endSceneTarget);
         if (g_resetTarget) MH_RemoveHook(g_resetTarget);
         MH_Uninitialize();
-        g_renderer = nullptr; g_originalEndScene = nullptr; g_originalReset = nullptr;
+        g_renderer.reset(); g_originalEndScene = nullptr; g_originalReset = nullptr;
         g_endSceneTarget = nullptr; g_resetTarget = nullptr;
     }
 #endif

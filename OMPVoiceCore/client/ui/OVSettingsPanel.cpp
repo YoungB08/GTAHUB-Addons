@@ -6,6 +6,7 @@
 
 #include <imgui.h>
 
+#include <algorithm>
 #include <string>
 
 namespace ov::client
@@ -28,6 +29,8 @@ void OVSettingsPanel::Render(OVClientConfig& config, OVAudioEngine& audio, OVBas
             ImGui::Checkbox("Automatic gain control", &values.sound.automaticGainControl); audio.EnableAGC(values.sound.automaticGainControl);
             ImGui::Checkbox("Voice activation", &values.sound.voiceActivation);
             ImGui::SliderFloat("Activation threshold", &values.sound.voiceThreshold, 0.01F, 1.0F);
+            ImGui::InputInt("Talk key (VK)", &values.talkKey);
+            values.talkKey = std::clamp(values.talkKey, 1, 255);
             ImGui::Checkbox("Speaker icons", &values.speakerIcon.enabled);
             ImGui::SliderFloat("Speaker icon scale", &values.speakerIcon.scale, 0.25F, 3.0F);
             ImGui::EndTabItem();
@@ -50,6 +53,8 @@ void OVSettingsPanel::Render(OVClientConfig& config, OVAudioEngine& audio, OVBas
             ImGui::Checkbox("Mute microphone", &values.microphone.muted);
             ImGui::Checkbox("Test microphone", &microphoneTest_);
             if (microphoneTest_) audio.SetTransmitting(true);
+            ImGui::ProgressBar(audio.MicRms(), ImVec2(260, 0), "Live level");
+            ImGui::ProgressBar(audio.MicPeak(), ImVec2(260, 0), "Peak");
             ImGui::SliderFloat("HUD scale", &values.microphoneIcon.scale, 0.25F, 3.0F);
             ImGui::SliderFloat("HUD X offset", &values.microphoneIcon.offsetX, -500.0F, 500.0F);
             ImGui::SliderFloat("HUD Y offset", &values.microphoneIcon.offsetY, -300.0F, 300.0F);

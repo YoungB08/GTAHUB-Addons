@@ -1,5 +1,6 @@
 #pragma once
 
+#include "shared/OVConstants.h"
 #include "shared/OVTypes.h"
 
 #include <cstdint>
@@ -53,6 +54,8 @@ public:
     std::uint32_t CreateRadioChannel();
     bool JoinRadio(int playerId, std::uint32_t channelId);
     bool LeaveRadio(int playerId, std::uint32_t channelId);
+    void SetPhoneLeakRadius(float radius);
+    [[nodiscard]] float PhoneLeakRadius() const;
     [[nodiscard]] std::vector<VoiceRecipient> Recipients(int sourceId, std::uint32_t channelId) const;
 
 private:
@@ -61,5 +64,6 @@ private:
     std::unordered_map<std::uint32_t, VoiceChannel> channels_;
     std::uint32_t nextChannelId_{1};
     std::uint32_t nextRadioId_{0x10000};
+    float phoneLeakRadius_{PHONE_LEAK_RADIUS};
 };
 }

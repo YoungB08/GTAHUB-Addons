@@ -50,6 +50,7 @@ public:
     [[nodiscard]] float MicPeak() const noexcept { return capture_.Peak(); }
     [[nodiscard]] std::vector<float> MicWaveform() const { return capture_.Waveform(); }
     [[nodiscard]] bool IsTransmitting() const noexcept { return transmitting_.load(std::memory_order_relaxed); }
+    [[nodiscard]] std::vector<int> RemotePlayerIds() const;
     [[nodiscard]] std::size_t RemoteStreamCount() const noexcept { return remoteStreamCount_.load(); }
 
 private:
@@ -79,6 +80,8 @@ private:
     OVAutomaticGain agc_;
     ThreadQueue<VoiceFrame> remoteQueue_{128};
     std::unordered_map<int, RemoteStream> remoteStreams_;
+    mutable std::mutex remoteMutex_;
+    std::vector<int> remotePlayerIds_;
     std::atomic_size_t remoteStreamCount_{};
     std::vector<std::int16_t> captureBuffer_;
     EncodedFrameHandler frameHandler_;

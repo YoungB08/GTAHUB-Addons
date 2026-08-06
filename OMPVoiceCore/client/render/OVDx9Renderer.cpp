@@ -11,6 +11,7 @@
 
 #include <Windows.h>
 
+#include <algorithm>
 #include <cmath>
 
 namespace ov::client
@@ -66,6 +67,40 @@ void OVDx9Renderer::OnEndScene(IDirect3DDevice9* device)
     if (!Initialize(device)) return;
     D3DVIEWPORT9 viewport{}; device_->GetViewport(&viewport);
     const bool transmitting = audio_.IsTransmitting();
+    speakers_.SetLocalPlayerId(0);
+    speakers_.SetViewport(static_cast<float>(viewport.Width), static_cast<float>(viewport.Height));
+    auto& microphoneIcon = config_.Values().microphoneIcon;
+    if (settingsOpen_)
+    {
+        POINT cursor{};
+        HWND window = GetForegroundWindow();
+        if (window && GetCursorPos(&cursor) && ScreenToClient(window, &cursor))
+        {
+            const bool pressed = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+            const float size = 64.0F * std::clamp(microphoneIcon.scale, 0.25F, 3.0F);
+            const float x = (static_cast<float>(viewport.Width) - size) * 0.5F + microphoneIcon.offsetX;
+            const float y = (static_cast<float>(viewport.Height) - 140.0F) + microphoneIcon.offsetY;
+            if (pressed && !draggingHud_ && cursor.x >= x && cursor.x <= x + size && cursor.y >= y && cursor.y <= y + size)
+            {
+                draggingHud_ = true;
+                dragStartX_ = cursor.x;
+                dragStartY_ = cursor.y;
+                dragOffsetX_ = microphoneIcon.offsetX;
+                dragOffsetY_ = microphoneIcon.offsetY;
+            }
+            if (pressed && draggingHud_)
+            {
+                microphoneIcon.offsetX = dragOffsetX_ + static_cast<float>(cursor.x - dragStartX_);
+                microphoneIcon.offsetY = dragOffsetY_ + static_cast<float>(cursor.y - dragStartY_);
+                config_.MarkDirty();
+            }
+            if (!pressed) draggingHud_ = false;
+        }
+    }
+    else draggingHud_ = false;
+    hud_.SetVisible(microphoneIcon.enabled);
+    hud_.SetScale(microphoneIcon.scale);
+    hud_.SetOffset(microphoneIcon.offsetX, microphoneIcon.offsetY);
     speakers_.SetEnabled(config_.Values().speakerIcon.enabled);
     speakers_.SetScale(config_.Values().speakerIcon.scale);
     speakers_.SetOffset(config_.Values().speakerIcon.offsetX, config_.Values().speakerIcon.offsetY);

@@ -48,5 +48,10 @@ private:
     bool initialized_{};
     bool settingsOpen_{};
     bool fakeRemote_{};
+    bool draggingHud_{};
+    int dragStartX_{};
+    int dragStartY_{};
+    float dragOffsetX_{};
+    float dragOffsetY_{};
 };
 }

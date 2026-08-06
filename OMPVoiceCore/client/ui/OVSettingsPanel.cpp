@@ -13,81 +13,88 @@ namespace ov::client
 {
 void OVSettingsPanel::Render(OVClientConfig& config, OVAudioEngine& audio, OVBassApi& bass, OVDiagnostic& diagnostic, bool dx9Hooked)
 {
-    if (!open_) return;
+    if (!open_) { config.FlushIfDue(); return; }
     if (!ImGui::Begin("OMPVoice Settings", &open_, ImGuiWindowFlags_AlwaysAutoResize)) { ImGui::End(); return; }
     auto& values = config.Values();
+    bool changed = false;
     if (ImGui::BeginTabBar("voice_tabs"))
     {
         if (ImGui::BeginTabItem("General"))
         {
-            ImGui::Checkbox("Turn on sound", &values.sound.enabled);
+            changed |= ImGui::Checkbox("Turn on sound", &values.sound.enabled);
             int volume = values.sound.masterVolume;
-            if (ImGui::SliderInt("Sound volume", &volume, 0, 100)) { values.sound.masterVolume = volume; audio.SetMasterVolume(volume / 100.0F); }
-            ImGui::Checkbox("Volume smoothing", &values.sound.smoothing);
-            ImGui::Checkbox("High pass filter", &values.sound.highPassFilter); audio.EnableHighPass(values.sound.highPassFilter);
-            ImGui::Checkbox("Noise suppression", &values.sound.noiseSuppression); audio.EnableNoiseSuppression(values.sound.noiseSuppression);
-            ImGui::Checkbox("Automatic gain control", &values.sound.automaticGainControl); audio.EnableAGC(values.sound.automaticGainControl);
-            ImGui::Checkbox("Voice activation", &values.sound.voiceActivation);
-            ImGui::SliderFloat("Activation threshold", &values.sound.voiceThreshold, 0.01F, 1.0F);
-            ImGui::InputInt("Talk key (VK)", &values.talkKey);
+            if (ImGui::SliderInt("Sound volume", &volume, 0, 100)) { values.sound.masterVolume = volume; audio.SetMasterVolume(volume / 100.0F); changed = true; }
+            changed |= ImGui::Checkbox("Volume smoothing", &values.sound.smoothing);
+            changed |= ImGui::Checkbox("High pass filter", &values.sound.highPassFilter); audio.EnableHighPass(values.sound.highPassFilter);
+            changed |= ImGui::Checkbox("Noise suppression", &values.sound.noiseSuppression); audio.EnableNoiseSuppression(values.sound.noiseSuppression);
+            changed |= ImGui::Checkbox("Automatic gain control", &values.sound.automaticGainControl); audio.EnableAGC(values.sound.automaticGainControl);
+            changed |= ImGui::Checkbox("Voice activation", &values.sound.voiceActivation);
+            changed |= ImGui::SliderFloat("Activation threshold", &values.sound.voiceThreshold, 0.01F, 1.0F);
+            changed |= ImGui::InputInt("Talk key (VK)", &values.talkKey);
             values.talkKey = std::clamp(values.talkKey, 1, 255);
-            ImGui::Checkbox("Speaker icons", &values.speakerIcon.enabled);
-            ImGui::SliderFloat("Speaker icon scale", &values.speakerIcon.scale, 0.25F, 3.0F);
+            changed |= ImGui::Checkbox("Speaker icons", &values.speakerIcon.enabled);
+            changed |= ImGui::SliderFloat("Speaker icon scale", &values.speakerIcon.scale, 0.25F, 3.0F);
+            changed |= ImGui::SliderFloat("Speaker icon X offset", &values.speakerIcon.offsetX, -500.0F, 500.0F);
+            changed |= ImGui::SliderFloat("Speaker icon Y offset", &values.speakerIcon.offsetY, -300.0F, 300.0F);
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Microphone"))
         {
-            ImGui::Checkbox("Enable microphone", &values.microphone.enabled);
+            changed |= ImGui::Checkbox("Enable microphone", &values.microphone.enabled);
             const auto devices = bass.RecordDevices();
             const char* currentDevice = values.microphone.device >= 0 && static_cast<std::size_t>(values.microphone.device) < devices.size() ? devices[values.microphone.device].c_str() : "Default device";
             if (ImGui::BeginCombo("Input device", currentDevice))
             {
-                if (ImGui::Selectable("Default device", values.microphone.device == -1)) { values.microphone.device = -1; audio.SetInputDevice(-1); }
+                if (ImGui::Selectable("Default device", values.microphone.device == -1)) { values.microphone.device = -1; audio.SetInputDevice(-1); changed = true; }
                 for (std::size_t index = 0; index < devices.size(); ++index)
                 {
-                    if (ImGui::Selectable(devices[index].c_str(), values.microphone.device == static_cast<int>(index))) { values.microphone.device = static_cast<int>(index); audio.SetInputDevice(static_cast<int>(index)); }
+                    if (ImGui::Selectable(devices[index].c_str(), values.microphone.device == static_cast<int>(index))) { values.microphone.device = static_cast<int>(index); audio.SetInputDevice(static_cast<int>(index)); changed = true; }
                 }
                 ImGui::EndCombo();
             }
-            ImGui::SliderFloat("Microphone gain", &values.microphone.gain, 0.0F, 2.0F);
-            ImGui::Checkbox("Mute microphone", &values.microphone.muted);
+            changed |= ImGui::SliderFloat("Microphone gain", &values.microphone.gain, 0.0F, 2.0F);
+            changed |= ImGui::Checkbox("Mute microphone", &values.microphone.muted);
             ImGui::Checkbox("Test microphone", &microphoneTest_);
             if (microphoneTest_) audio.SetTransmitting(true);
             ImGui::ProgressBar(audio.MicRms(), ImVec2(260, 0), "Live level");
             ImGui::ProgressBar(audio.MicPeak(), ImVec2(260, 0), "Peak");
-            ImGui::SliderFloat("HUD scale", &values.microphoneIcon.scale, 0.25F, 3.0F);
-            ImGui::SliderFloat("HUD X offset", &values.microphoneIcon.offsetX, -500.0F, 500.0F);
-            ImGui::SliderFloat("HUD Y offset", &values.microphoneIcon.offsetY, -300.0F, 300.0F);
+            changed |= ImGui::SliderFloat("HUD scale", &values.microphoneIcon.scale, 0.25F, 3.0F);
+            changed |= ImGui::SliderFloat("HUD X offset", &values.microphoneIcon.offsetX, -500.0F, 500.0F);
+            changed |= ImGui::SliderFloat("HUD Y offset", &values.microphoneIcon.offsetY, -300.0F, 300.0F);
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Black list"))
         {
             ImGui::InputText("Search player", blacklistSearch_, sizeof(blacklistSearch_));
-            for (int playerId = 0; playerId < 1000; ++playerId)
+            const auto onlinePlayers = audio.RemotePlayerIds();
+            for (const int playerId : onlinePlayers)
             {
+                if (blacklistSearch_[0] != '\0' && std::to_string(playerId).find(blacklistSearch_) == std::string::npos) continue;
                 const bool muted = values.blacklist.count(playerId) != 0;
                 if (ImGui::Button((std::to_string(playerId) + (muted ? "  Unmute" : "  Mute")).c_str()))
                 {
                     if (muted) values.blacklist.erase(playerId); else values.blacklist.insert(playerId);
+                    changed = true;
                 }
-                if (playerId > 32) break;
             }
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Debug"))
         {
-            ImGui::Checkbox("Self loopback", &values.debug.loopback);
-            ImGui::Checkbox("Voice mirror mode", &values.debug.mirrorMode);
-            ImGui::Checkbox("Fake remote player", &values.debug.fakeRemote);
-            ImGui::Checkbox("Show debug overlay", &values.debug.showOverlay);
-            ImGui::SliderFloat("Packet loss", &values.debug.packetLoss, 0.0F, 50.0F);
-            ImGui::SliderInt("Jitter (ms)", &values.debug.jitterMs, 0, 200);
-            ImGui::SliderInt("Latency (ms)", &values.debug.latencyMs, 0, 300);
+            changed |= ImGui::Checkbox("Self loopback", &values.debug.loopback);
+            changed |= ImGui::Checkbox("Voice mirror mode", &values.debug.mirrorMode);
+            changed |= ImGui::Checkbox("Fake remote player", &values.debug.fakeRemote);
+            changed |= ImGui::Checkbox("Show debug overlay", &values.debug.showOverlay);
+            changed |= ImGui::SliderFloat("Packet loss", &values.debug.packetLoss, 0.0F, 50.0F);
+            changed |= ImGui::SliderInt("Jitter (ms)", &values.debug.jitterMs, 0, 200);
+            changed |= ImGui::SliderInt("Latency (ms)", &values.debug.latencyMs, 0, 300);
             if (ImGui::Button("Run diagnostic")) { std::string output; diagnostic.Run(bass, audio, dx9Hooked, output); }
             ImGui::EndTabItem();
         }
         ImGui::EndTabBar();
     }
+    if (changed) config.MarkDirty();
+    config.FlushIfDue();
     if (ImGui::Button("Save JSON")) config.Save();
     ImGui::SameLine();
     if (ImGui::Button("Reload JSON")) config.Load();

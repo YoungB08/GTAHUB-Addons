@@ -60,6 +60,15 @@ int RunChannelTests()
     Check(phoneManager.PhoneLeakRadius() == 10.0F);
     phoneRecipients = phoneManager.Recipients(1, 0);
     Check(std::find_if(phoneRecipients.begin(), phoneRecipients.end(), [](const auto& recipient) { return recipient.playerId == 3 && recipient.mode == ov::VoiceMode::Phone; }) != phoneRecipients.end());
+    const auto spamGlobal = phoneManager.CreateChannel(-1.0F, ov::VoiceMode::Global);
+    for (int iteration = 0; iteration < 100; ++iteration)
+    {
+        (void)phoneManager.Recipients(1, spamGlobal);
+        phoneManager.EndPhoneCall(1);
+        Check(phoneManager.StartPhoneCall(1, 2));
+        (void)phoneManager.Recipients(1, 0);
+    }
+    phoneManager.EndPhoneCall(1);
 
     ov::server::OVChannelManager concurrent;
     const auto stressChannel = concurrent.CreateChannel(25.0F);

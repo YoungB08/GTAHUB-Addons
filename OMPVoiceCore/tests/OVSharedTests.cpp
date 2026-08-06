@@ -1,6 +1,7 @@
 #include "shared/OVConfig.h"
 #include "shared/OVCrashSafety.h"
 #include "shared/OVPacket.h"
+#include "server/debug/ServerVoiceDebug.h"
 
 #include <filesystem>
 #include <iostream>
@@ -56,6 +57,12 @@ int main()
     std::filesystem::remove(configPath.string() + ".bak", ignored);
 
     failures += RunChannelTests();
+    ov::server::ServerVoiceDebug diagnostics(std::filesystem::temp_directory_path() / "ompvoice-server-diagnostic-test");
+    std::string diagnosticPath;
+    Check(diagnostics.Run(true, diagnosticPath), "server diagnostic report");
+    Check(std::filesystem::exists(diagnosticPath), "server diagnostic output exists");
+    std::error_code diagnosticError;
+    std::filesystem::remove_all(std::filesystem::path(diagnosticPath).parent_path(), diagnosticError);
     Check(ov::CrashSafety::Install(std::filesystem::temp_directory_path() / "ompvoice-crash-test"), "crash handler install");
     ov::CrashSafety::Uninstall();
 

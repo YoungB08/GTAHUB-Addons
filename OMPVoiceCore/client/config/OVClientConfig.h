@@ -2,6 +2,8 @@
 
 #include "shared/OVConfig.h"
 
+#include <chrono>
+
 #include <filesystem>
 #include <string>
 
@@ -13,6 +15,8 @@ public:
     explicit OVClientConfig(std::filesystem::path path = std::filesystem::path("ompvoice") / "config.json");
     bool Load();
     bool Save();
+    void MarkDirty() noexcept;
+    void FlushIfDue();
     [[nodiscard]] Config& Values() noexcept { return values_; }
     [[nodiscard]] const Config& Values() const noexcept { return values_; }
     [[nodiscard]] const std::string& LastError() const noexcept { return lastError_; }
@@ -22,5 +26,7 @@ private:
     Config values_;
     ConfigStore store_;
     std::string lastError_;
+    bool dirty_{};
+    std::chrono::steady_clock::time_point dirtyAt_{};
 };
 }

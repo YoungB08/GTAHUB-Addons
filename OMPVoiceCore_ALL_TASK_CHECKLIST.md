@@ -388,8 +388,8 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 ## Limits
 
 - [x] Max simultaneous voices = 8
-- [ ] Priority sorting
-- [ ] Closest player selection
+- [x] Priority sorting
+- [x] Closest player selection
 
 ---
 
@@ -475,7 +475,7 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 - [x] 300–3400 Hz EQ
 - [x] Slight compression
-- [ ] GSM-like sound
+- [x] GSM-like sound
 
 ---
 
@@ -493,7 +493,7 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 - [x] Scale slider
 - [x] X offset
 - [x] Y offset
-- [ ] Drag & drop move mode
+- [x] Drag & drop move mode
 
 ---
 
@@ -538,7 +538,7 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 ## Black list tab
 
 - [x] Search field
-- [ ] Online players list
+- [x] Online players list
 - [x] Mute toggle
 - [x] Save blacklist
 
@@ -673,7 +673,7 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Leak checks
 
-- [ ] Client connect/disconnect 100 times
+- [x] Client connect/disconnect 100 times
 - [ ] Open/close settings 100 times
 - [ ] Start/stop capture 100 times
 - [ ] No growing memory usage
@@ -691,7 +691,7 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Save
 
-- [ ] Save on change
+- [x] Save on change
 - [x] Pretty-print JSON
 - [x] Atomic write
 - [x] Backup previous config
@@ -739,10 +739,10 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ## Server
 
-- [ ] 50 fake voice clients
-- [ ] Rapid connect/disconnect
-- [ ] Global channel spam
-- [ ] Phone call spam
+- [x] 50 fake voice clients
+- [x] Rapid connect/disconnect
+- [x] Global channel spam
+- [x] Phone call spam
 
 ---
 
@@ -774,10 +774,10 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 ### Core
 
 - [ ] Component loads
-- [ ] UID valid
-- [ ] UDP 7775 bound
-- [ ] Handshake works
-- [ ] Reconnect works
+- [x] UID valid
+- [x] UDP 7775 bound
+- [x] Handshake works
+- [x] Reconnect works
 
 ### Audio
 
@@ -785,13 +785,13 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 - [x] Encode works
 - [x] Decode works
 - [x] Effects work
-- [ ] 3D audio works
+- [x] 3D audio works
 
 ### UI
 
 - [ ] All tabs functional
 - [ ] No ImGui crashes
-- [ ] Settings persist
+- [x] Settings persist
 
 ### Render
 
@@ -806,7 +806,7 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 - [ ] Fake remote works
 - [ ] Packet simulator works
 - [ ] Oscilloscope works
-- [ ] Diagnostic report works
+- [x] Diagnostic report works
 
 ### Stability
 

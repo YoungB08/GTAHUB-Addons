@@ -58,6 +58,11 @@ bool OVAudioEngine::SetInputDevice(int device)
 void OVAudioEngine::SetFrameHandler(EncodedFrameHandler handler) { std::lock_guard<std::mutex> lock(handlerMutex_); frameHandler_ = std::move(handler); }
 void OVAudioEngine::OnRemoteFrame(VoiceFrame frame) { remoteQueue_.Push(std::move(frame)); }
 void OVAudioEngine::Update() { if (!running_) ProcessRemote(); }
+std::vector<int> OVAudioEngine::RemotePlayerIds() const
+{
+    std::lock_guard<std::mutex> lock(remoteMutex_);
+    return remotePlayerIds_;
+}
 
 void OVAudioEngine::ProcessLoop()
 {
@@ -106,6 +111,7 @@ void OVAudioEngine::ProcessRemote()
         if (remoteStreams_.find(frame->playerId) == remoteStreams_.end() && remoteStreams_.size() >= MAX_SIMULTANEOUS_VOICES)
         {
             const auto quietest = std::min_element(remoteStreams_.begin(), remoteStreams_.end(), [](const auto& left, const auto& right) { return left.second.gain < right.second.gain; });
+            if (quietest != remoteStreams_.end() && frame->gain <= quietest->second.gain) continue;
             if (quietest != remoteStreams_.end()) remoteStreams_.erase(quietest);
         }
         auto& stream = remoteStreams_[frame->playerId];
@@ -128,6 +134,12 @@ void OVAudioEngine::ProcessRemote()
         if (it->second.lastPacket.time_since_epoch().count() != 0 && now - it->second.lastPacket > std::chrono::seconds(1)) it = remoteStreams_.erase(it);
         else ++it;
     }
+    {
+        std::lock_guard<std::mutex> lock(remoteMutex_);
+        remotePlayerIds_.clear();
+        remotePlayerIds_.reserve(remoteStreams_.size());
+        for (const auto& [playerId, stream] : remoteStreams_) if (stream.initialized) remotePlayerIds_.push_back(playerId);
+    }
     remoteStreamCount_ = remoteStreams_.size();
 }
 
@@ -148,6 +160,12 @@ void OVAudioEngine::ApplyModeEffect(RemoteStream& stream, std::vector<std::int16
         {
             noise = noise * 1664525U + 1013904223U;
             value += static_cast<float>(static_cast<int>((noise >> 24U) & 0xFFU) - 128) * 4.0F;
+        }
+        else
+        {
+            noise = noise * 1664525U + 1013904223U;
+            value += static_cast<float>(static_cast<int>((noise >> 27U) & 0x1FU) - 16) * 5.0F;
+            value = std::round(value / 192.0F) * 192.0F;
         }
         sample = static_cast<std::int16_t>(std::clamp(value, -32768.0F, 32767.0F));
     }

@@ -71,7 +71,7 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 - [x] `OMPVoiceCore` class
 - [x] `onLoad()`
-- [ ] `onUnload()` (SDK không có callback này; destructor + `free()` đảm nhiệm unload)
+- [x] `onUnload()` (SDK không có callback này; lifecycle test xác nhận `free()` + destructor + `FreeLibrary`)
 - [x] `componentName()`
 - [x] `COMPONENT_ENTRY_POINT()`
 
@@ -112,7 +112,7 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 ## Registration
 
 - [x] PawnManager registration
-- [ ] Native lookup test
+- [x] Native lookup test
 - [x] Gamemode compile test
 
 ---
@@ -773,7 +773,7 @@ Checklist này dùng để **theo dõi toàn bộ tiến độ phát triển OMP
 
 ### Core
 
-- [ ] Component loads
+- [x] Component loads
 - [x] UID valid
 - [x] UDP 7775 bound
 - [x] Handshake works

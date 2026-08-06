@@ -5,6 +5,8 @@
 
 #include <algorithm>
 #include <iterator>
+#include <string_view>
+#include <vector>
 
 #include <Server/Components/Pawn/pawn.hpp>
 
@@ -30,18 +32,47 @@ cell OV_ShowHudIcon(AMX*, const cell* params) { if (g_channels && params) g_chan
 cell OV_CreateRadioChannel(AMX*, const cell*) { return g_channels ? static_cast<cell>(g_channels->CreateRadioChannel()) : 0; }
 cell OV_JoinRadioChannel(AMX*, const cell* params) { return g_channels && params ? Bool(g_channels->JoinRadio(Player(params[1]), static_cast<std::uint32_t>(params[2]))) : 0; }
 cell OV_LeaveRadioChannel(AMX*, const cell* params) { return g_channels && params ? Bool(g_channels->LeaveRadio(Player(params[1]), static_cast<std::uint32_t>(params[2]))) : 0; }
+
+#define OV_NATIVE_TABLE(X) \
+    X(OV_EnableVoice) \
+    X(OV_IsTalking) \
+    X(OV_SetVolume) \
+    X(OV_SetMuted) \
+    X(OV_CreateChannel) \
+    X(OV_DestroyChannel) \
+    X(OV_SetTalkKey) \
+    X(OV_StartPhoneCall) \
+    X(OV_EndPhoneCall) \
+    X(OV_ShowHudIcon) \
+    X(OV_CreateRadioChannel) \
+    X(OV_JoinRadioChannel) \
+    X(OV_LeaveRadioChannel)
 }
 
 void SetNativeContext(OVChannelManager* channels) { g_channels = channels; }
 
 void RegisterNatives(IPawnScript& script)
 {
+#define OV_NATIVE_INFO(name) {#name, &name},
     const AMX_NATIVE_INFO natives[] = {
-        {"OV_EnableVoice", &OV_EnableVoice}, {"OV_IsTalking", &OV_IsTalking}, {"OV_SetVolume", &OV_SetVolume},
-        {"OV_SetMuted", &OV_SetMuted}, {"OV_CreateChannel", &OV_CreateChannel}, {"OV_DestroyChannel", &OV_DestroyChannel},
-        {"OV_SetTalkKey", &OV_SetTalkKey}, {"OV_StartPhoneCall", &OV_StartPhoneCall}, {"OV_EndPhoneCall", &OV_EndPhoneCall},
-        {"OV_ShowHudIcon", &OV_ShowHudIcon}, {"OV_CreateRadioChannel", &OV_CreateRadioChannel},
-        {"OV_JoinRadioChannel", &OV_JoinRadioChannel}, {"OV_LeaveRadioChannel", &OV_LeaveRadioChannel}};
+        OV_NATIVE_TABLE(OV_NATIVE_INFO)};
+#undef OV_NATIVE_INFO
     script.Register(natives, static_cast<int>(std::size(natives)));
 }
+
+const std::vector<std::string_view>& RegisteredNativeNames()
+{
+#define OV_NATIVE_NAME(name) #name,
+    static const std::vector<std::string_view> names{OV_NATIVE_TABLE(OV_NATIVE_NAME)};
+#undef OV_NATIVE_NAME
+    return names;
+}
+
+bool HasRegisteredNative(std::string_view name)
+{
+    const auto& names = RegisteredNativeNames();
+    return std::find(names.begin(), names.end(), name) != names.end();
+}
+
+#undef OV_NATIVE_TABLE
 }

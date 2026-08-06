@@ -8,6 +8,24 @@ target_include_directories(ov_shared_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/
 add_test(NAME ov_shared_tests COMMAND ov_shared_tests)
 
 if(OV_BUILD_SERVER)
+    add_executable(ov_native_lookup_tests
+        OVNativeLookupTests.cpp
+        ../server/natives/OVPawnNatives.cpp
+        ../server/channels/OVChannelManager.cpp)
+    target_include_directories(ov_native_lookup_tests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/.."
+        "$<$<BOOL:${OV_FETCH_DEPENDENCIES}>:${pawn_sdk_SOURCE_DIR}/source>")
+    target_compile_definitions(ov_native_lookup_tests PRIVATE HAVE_STDINT_H)
+    target_link_libraries(ov_native_lookup_tests PRIVATE ov_shared OMP-SDK)
+    add_test(NAME ov_native_lookup_tests COMMAND ov_native_lookup_tests)
+
+    if(WIN32)
+        add_executable(ov_component_lifecycle_tests OVComponentLifecycleTests.cpp)
+        target_link_libraries(ov_component_lifecycle_tests PRIVATE OMP-SDK)
+        add_dependencies(ov_component_lifecycle_tests ompvoice_server)
+        add_test(NAME ov_component_lifecycle_tests COMMAND ov_component_lifecycle_tests "$<TARGET_FILE:ompvoice_server>")
+    endif()
+
     add_executable(ov_network_integration_tests
         OVNetworkIntegrationTests.cpp
         ../client/network/OVNetworkClient.cpp

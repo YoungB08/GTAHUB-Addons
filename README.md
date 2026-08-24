@@ -8,20 +8,13 @@ Client hiện gồm:
 
 - Custom D3D9 Nametag Engine và role badge.
 - RakNet role protocol kết nối với open.mp server component.
-- Custom Chat cho SA-MP 0.3.DL R1 với native fallback.
-- Chat capture tại điểm hội tụ `CChat::AddEntry` và custom network packet, gửi qua original `CInput::Send`.
-- Composer UTF-16, Windows IME, clipboard Unicode, selection, history và smooth scroll.
-- Direct3D9 lost/reset lifecycle và runtime config tại `HUB-Core/chat.ini`.
+- Multi-slot role, preset badges, image badges, rainbow effects và nametag custom color.
+- Direct3D9 lost/reset lifecycle.
 
 ## Cấu trúc chính
 
 ```text
 HUB-Core/
-├── CustomChat.cpp
-├── CustomChatInput.cpp
-├── ChatManager.cpp
-├── ChatSettings.cpp
-├── HookManager.cpp
 ├── D3DHook.cpp
 ├── Nametag.cpp
 ├── Network.cpp
@@ -29,7 +22,6 @@ HUB-Core/
 ├── framework.h
 ├── pch.cpp
 ├── pch.h
-├── chat.ini
 └── HUB-Core.vcxproj
 ```
 
@@ -52,5 +44,3 @@ Hoặc dùng MSBuild:
 ```cmd
 MSBuild.exe HUB-Core\HUB-Core.vcxproj /p:Configuration=Release /p:Platform=Win32
 ```
-
-Custom Chat chỉ cài internal hooks khi phát hiện SA-MP 0.3.DL R1. Nếu hook hoặc D3D resource không sẵn sàng, native chat tiếp tục render.

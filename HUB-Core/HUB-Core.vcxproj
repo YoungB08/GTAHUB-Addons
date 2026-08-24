@@ -93,7 +93,7 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)include;$(ProjectDir)include\chat;$(ProjectDir)include\core;$(ProjectDir)include\game;$(ProjectDir)include\render;$(SolutionDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)include;$(ProjectDir)include\core;$(ProjectDir)include\game;$(ProjectDir)include\render;$(SolutionDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
     </ClCompile>
     <Link>
@@ -106,8 +106,7 @@
     <PostBuildEvent>
       <Command>taskkill /f /im gta_sa.exe 2&gt;nul
 if not exist "D:\GTA-Hub\GTA SAN ANDREAS\HUB-Core" mkdir "D:\GTA-Hub\GTA SAN ANDREAS\HUB-Core"
-copy /y "$(TargetPath)" "D:\GTA-Hub\GTA SAN ANDREAS\HUB-Core.asi"
-copy /y "$(ProjectDir)config\chat.ini" "D:\GTA-Hub\GTA SAN ANDREAS\HUB-Core\chat.ini"</Command>
+copy /y "$(TargetPath)" "D:\GTA-Hub\GTA SAN ANDREAS\HUB-Core.asi"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -121,7 +120,7 @@ copy /y "$(ProjectDir)config\chat.ini" "D:\GTA-Hub\GTA SAN ANDREAS\HUB-Core\chat
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)include;$(ProjectDir)include\chat;$(ProjectDir)include\core;$(ProjectDir)include\game;$(ProjectDir)include\render;$(SolutionDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)include;$(ProjectDir)include\core;$(ProjectDir)include\game;$(ProjectDir)include\render;$(SolutionDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
     </ClCompile>
     <Link>
@@ -136,8 +135,7 @@ copy /y "$(ProjectDir)config\chat.ini" "D:\GTA-Hub\GTA SAN ANDREAS\HUB-Core\chat
     <PostBuildEvent>
       <Command>taskkill /f /im gta_sa.exe 2&gt;nul
 if not exist "D:\GTA-Hub\GTA SAN ANDREAS\HUB-Core" mkdir "D:\GTA-Hub\GTA SAN ANDREAS\HUB-Core"
-copy /y "$(TargetPath)" "D:\GTA-Hub\GTA SAN ANDREAS\HUB-Core.asi"
-copy /y "$(ProjectDir)config\chat.ini" "D:\GTA-Hub\GTA SAN ANDREAS\HUB-Core\chat.ini"</Command>
+copy /y "$(TargetPath)" "D:\GTA-Hub\GTA SAN ANDREAS\HUB-Core.asi"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -149,7 +147,7 @@ copy /y "$(ProjectDir)config\chat.ini" "D:\GTA-Hub\GTA SAN ANDREAS\HUB-Core\chat
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)include;$(ProjectDir)include\chat;$(ProjectDir)include\core;$(ProjectDir)include\game;$(ProjectDir)include\render;$(SolutionDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)include;$(ProjectDir)include\core;$(ProjectDir)include\game;$(ProjectDir)include\render;$(SolutionDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
     </ClCompile>
     <Link>
@@ -171,7 +169,7 @@ copy /y "$(ProjectDir)config\chat.ini" "D:\GTA-Hub\GTA SAN ANDREAS\HUB-Core\chat
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)include;$(ProjectDir)include\chat;$(ProjectDir)include\core;$(ProjectDir)include\game;$(ProjectDir)include\render;$(SolutionDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)include;$(ProjectDir)include\core;$(ProjectDir)include\game;$(ProjectDir)include\render;$(SolutionDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
     </ClCompile>
     <Link>
@@ -193,7 +191,7 @@ copy /y "$(ProjectDir)config\chat.ini" "D:\GTA-Hub\GTA SAN ANDREAS\HUB-Core\chat
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)include;$(ProjectDir)include\chat;$(ProjectDir)include\core;$(ProjectDir)include\game;$(ProjectDir)include\render;$(SolutionDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)include;$(ProjectDir)include\core;$(ProjectDir)include\game;$(ProjectDir)include\render;$(SolutionDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
     </ClCompile>
     <Link>
@@ -215,7 +213,7 @@ copy /y "$(ProjectDir)config\chat.ini" "D:\GTA-Hub\GTA SAN ANDREAS\HUB-Core\chat
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)include;$(ProjectDir)include\chat;$(ProjectDir)include\core;$(ProjectDir)include\game;$(ProjectDir)include\render;$(SolutionDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)include;$(ProjectDir)include\core;$(ProjectDir)include\game;$(ProjectDir)include\render;$(SolutionDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
     </ClCompile>
     <Link>
@@ -227,24 +225,14 @@ copy /y "$(ProjectDir)config\chat.ini" "D:\GTA-Hub\GTA SAN ANDREAS\HUB-Core\chat
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <None Include="config\chat.ini" />
-  </ItemGroup>
-  <ItemGroup>
     <ClInclude Include="include\core\framework.h" />
     <ClInclude Include="include\render\D3DHelper.h" />
-    <ClInclude Include="include\chat\ChatManager.h" />
-    <ClInclude Include="include\chat\ChatSettings.h" />
-    <ClInclude Include="include\chat\ChatTextRenderer.h" />
-    <ClInclude Include="include\chat\CustomChat.h" />
-    <ClInclude Include="include\chat\CustomChatInput.h" />
-    <ClInclude Include="include\core\HookManager.h" />
     <ClInclude Include="include\core\Logger.h" />
     <ClInclude Include="include\render\D3DHook.h" />
     <ClInclude Include="include\render\Nametag.h" />
     <ClInclude Include="include\core\Network.h" />
     <ClInclude Include="include\game\PlayerData.h" />
     <ClInclude Include="include\game\RoleConfig.h" />
-    <ClInclude Include="include\chat\SettingsPanel.h" />
     <ClInclude Include="include\render\TextureCache.h" />
     <ClInclude Include="include\render\W2S.h" />
     <ClInclude Include="include\core\pch.h" />
@@ -255,17 +243,10 @@ copy /y "$(ProjectDir)config\chat.ini" "D:\GTA-Hub\GTA SAN ANDREAS\HUB-Core\chat
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\core\dllmain.cpp" />
-    <ClCompile Include="src\chat\ChatManager.cpp" />
-    <ClCompile Include="src\chat\ChatSettings.cpp" />
-    <ClCompile Include="src\chat\ChatTextRenderer.cpp" />
-    <ClCompile Include="src\chat\CustomChat.cpp" />
-    <ClCompile Include="src\chat\CustomChatInput.cpp" />
-    <ClCompile Include="src\core\HookManager.cpp" />
     <ClCompile Include="src\core\Logger.cpp" />
     <ClCompile Include="src\render\D3DHook.cpp" />
     <ClCompile Include="src\render\Nametag.cpp" />
     <ClCompile Include="src\core\Network.cpp" />
-    <ClCompile Include="src\chat\SettingsPanel.cpp" />
     <ClCompile Include="vendor\MinHook\buffer.c">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>

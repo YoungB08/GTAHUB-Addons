@@ -2,7 +2,7 @@
 <Project>
   <ProjectOutputs>
     <ProjectOutput>
-      <FullPath>D:\GTAHUB-Addons\Release\HUB-Core.asi</FullPath>
+      <FullPath>d:\GTAHUB-Addons\HUB-Core\Release\HUB-Core.asi</FullPath>
     </ProjectOutput>
   </ProjectOutputs>
   <ContentFiles />

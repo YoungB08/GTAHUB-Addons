@@ -1,7 +1,6 @@
 #include "pch.h"
 #include "Network.h"
 
-#include "ChatManager.h"
 #include "PlayerData.h"
 #include "RoleConfig.h"
 
@@ -223,46 +222,6 @@ void ParseVisibility(const uint8_t* data, size_t length) {
     g_Players[playerId].visible = visible != 0;
 }
 
-void ParseChatChannel(const uint8_t* data, size_t length) {
-    PacketReader reader(data, length);
-    uint8_t packetId = 0;
-    uint16_t channelId = 0;
-    uint32_t color = 0;
-    std::string name;
-    if (reader.Read(packetId) && packetId == Network::kPktChatChannel && reader.Read(channelId) &&
-        reader.Read(color) && reader.ReadString(name, 31)) {
-        Log("Chat channel packet: id=%u color=%08X name=%s", channelId, color, name.c_str());
-    }
-}
-
-void ParseChatRemove(const uint8_t* data, size_t length) {
-    PacketReader reader(data, length);
-    uint8_t packetId = 0;
-    uint16_t channelId = 0;
-    if (reader.Read(packetId) && packetId == Network::kPktChatRemove && reader.Read(channelId)) {
-        Log("Chat remove packet: id=%u", channelId);
-    }
-}
-
-void ParseChatMessage(const uint8_t* data, size_t length) {
-    PacketReader reader(data, length);
-    uint8_t packetId = 0;
-    uint16_t channelId = 0;
-    uint32_t color = 0;
-    std::string text;
-    if (reader.Read(packetId) && packetId == Network::kPktChatMessage && reader.Read(channelId) &&
-        reader.Read(color) && reader.ReadString(text, 255)) {
-        const D3DCOLOR argbColor = (color << 24) | (color >> 8);
-        HUB::Chat::ChatManager::Get().OnClientMessage(argbColor, text.c_str());
-        Log("Chat message packet: channel=%u color=%08X length=%u text=%s",
-            channelId, color, static_cast<unsigned>(text.size()), text.c_str());
-    }
-}
-
-void ParseChatControl(const uint8_t* data, size_t length, uint8_t expectedPacket) {
-    (void)data; (void)length; (void)expectedPacket;
-}
-
 bool HandlePacket(const RakPacket* packet) {
     if (!packet || !IsReadable(packet, sizeof(RakPacket)) || packet->length == 0 ||
         packet->length > 4096 || !IsReadable(packet->data, packet->length)) {
@@ -276,11 +235,6 @@ bool HandlePacket(const RakPacket* packet) {
         case Network::kPktSetRainbow: ParseRainbow(packet->data, packet->length); return true;
         case Network::kPktNametagColor: ParseNametagColor(packet->data, packet->length); return true;
         case Network::kPktSetVisibility: ParseVisibility(packet->data, packet->length); return true;
-        case Network::kPktChatChannel: ParseChatChannel(packet->data, packet->length); return true;
-        case Network::kPktChatRemove: ParseChatRemove(packet->data, packet->length); return true;
-        case Network::kPktChatMessage: ParseChatMessage(packet->data, packet->length); return true;
-        case Network::kPktChatActive: ParseChatControl(packet->data, packet->length, Network::kPktChatActive); return true;
-        case Network::kPktChatClear: ParseChatControl(packet->data, packet->length, Network::kPktChatClear); return true;
         default: return false;
     }
 }
@@ -348,24 +302,4 @@ void Network::Shutdown() {
 
 bool Network::IsReady() {
     return g_Ready.load(std::memory_order_acquire);
-}
-
-bool Network::SendChatPacket(const char* text) {
-    if (!g_Ready.load(std::memory_order_acquire) || !g_RakClient || !g_RakVmt || !text) {
-        return false;
-    }
-    const size_t length = std::strlen(text);
-    if (length == 0 || length > 255) return false;
-
-    std::vector<uint8_t> buffer(2 + length);
-    buffer[0] = 101; // ID_CHAT_MESSAGE
-    buffer[1] = static_cast<uint8_t>(length);
-    std::memcpy(buffer.data() + 2, text, length);
-
-    using SendFn = bool(__thiscall*)(void*, const char*, int, int, int, char);
-    SendFn send = reinterpret_cast<SendFn>(g_RakVmt[6]);
-    if (!send) return false;
-
-    return send(g_RakClient, reinterpret_cast<const char*>(buffer.data()),
-        static_cast<int>(buffer.size()), 1, 3, 0);
 }

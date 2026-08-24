@@ -1,7 +1,6 @@
 #include "pch.h"
 #include "framework.h"
 #include "D3DHook.h"
-#include "HookManager.h"
 #include "Logger.h"
 #include "Network.h"
 #include "RoleConfig.h"
@@ -87,7 +86,6 @@ static DWORD WINAPI MainThread(LPVOID lpParam) {
 
     RoleConfig::InitDefaults();
     bool vehicleLimitPatchAttempted = false;
-    bool hooksInstalledAttempted = false;
     while (true) {
         std::this_thread::sleep_for(std::chrono::milliseconds(250));
 
@@ -96,11 +94,6 @@ static DWORD WINAPI MainThread(LPVOID lpParam) {
         }
 
         CChat* pChat = GetRefChat();
-        CInput* pInput = GetRefInput();
-        if (!hooksInstalledAttempted && pChat && pInput) {
-            hooksInstalledAttempted = true;
-            HookManager::Install();
-        }
 
         CNetGame* netGame = GetRefNetGame();
         CPlayerTags* playerTags = GetRefPlayerTags();
@@ -133,7 +126,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
             CreateThread(NULL, 0, MainThread, NULL, 0, NULL);
             break;
         case DLL_PROCESS_DETACH:
-            HookManager::Uninstall();
             Network::Shutdown();
             D3DHook::Uninstall();
             break;

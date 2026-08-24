@@ -23,3 +23,6 @@ HUB-Core/x64/
 .diag/
 HUB-Core/diagnostics/samp_disasm.txt
 HUB-Core/diagnostics/symbols.txt
+HUB-ServerComponent/build/
+output/
+

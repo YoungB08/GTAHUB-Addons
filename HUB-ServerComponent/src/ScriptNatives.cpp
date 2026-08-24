@@ -249,48 +249,6 @@ static cell AMX_NATIVE_CALL n_IsRoleResourceLoaded(AMX* amx, const cell* params)
     return 0;
 }
 
-static cell AMX_NATIVE_CALL n_AddChatChannel(AMX* amx, const cell* params) {
-    if (params[0] < 3 * sizeof(cell)) return 0;
-    if (auto comp = GetRoleComponent()) {
-        return comp->addChatChannel(static_cast<uint16_t>(params[1]),
-            amx_GetStringParam(amx, params[2]), static_cast<uint32_t>(params[3])) ? 1 : 0;
-    }
-    return 0;
-}
-
-static cell AMX_NATIVE_CALL n_RemoveChatChannel(AMX* amx, const cell* params) {
-    (void)amx;
-    if (params[0] < 1 * sizeof(cell)) return 0;
-    if (auto comp = GetRoleComponent()) return comp->removeChatChannel(static_cast<uint16_t>(params[1])) ? 1 : 0;
-    return 0;
-}
-
-static cell AMX_NATIVE_CALL n_SendClientChannelMessage(AMX* amx, const cell* params) {
-    if (params[0] < 4 * sizeof(cell)) return 0;
-    if (auto comp = GetRoleComponent()) {
-        return comp->sendChatMessage(static_cast<int>(params[1]), static_cast<uint16_t>(params[2]),
-            static_cast<uint32_t>(params[3]), amx_GetStringParam(amx, params[4])) ? 1 : 0;
-    }
-    return 0;
-}
-
-static cell AMX_NATIVE_CALL n_SetPlayerChatChannel(AMX* amx, const cell* params) {
-    (void)amx;
-    if (params[0] < 2 * sizeof(cell)) return 0;
-    if (auto comp = GetRoleComponent()) {
-        return comp->setPlayerChatChannel(static_cast<int>(params[1]), static_cast<uint16_t>(params[2])) ? 1 : 0;
-    }
-    return 0;
-}
-
-static cell AMX_NATIVE_CALL n_ClearPlayerChatChannel(AMX* amx, const cell* params) {
-    (void)amx;
-    if (params[0] < 1 * sizeof(cell)) return 0;
-    const uint16_t channelId = params[0] >= 2 * sizeof(cell) ? static_cast<uint16_t>(params[2]) : 0;
-    if (auto comp = GetRoleComponent()) return comp->clearPlayerChatChannel(static_cast<int>(params[1]), channelId) ? 1 : 0;
-    return 0;
-}
-
 const AMX_NATIVE_INFO g_RoleNatives[] = {
     { "AddRoleResource",        n_AddRoleResource },
     { "SetRoleGlobalConfig",   n_SetRoleGlobalConfig },
@@ -306,11 +264,6 @@ const AMX_NATIVE_INFO g_RoleNatives[] = {
     { "HasPlayerRole",         n_HasPlayerRole },
     { "IsPlayerRoleVisible",   n_IsPlayerRoleVisible },
     { "IsRoleResourceLoaded",  n_IsRoleResourceLoaded },
-    { "AddChatChannel",        n_AddChatChannel },
-    { "RemoveChatChannel",     n_RemoveChatChannel },
-    { "SendClientChannelMessage", n_SendClientChannelMessage },
-    { "SetPlayerChatChannel",  n_SetPlayerChatChannel },
-    { "ClearPlayerChatChannel", n_ClearPlayerChatChannel },
     { nullptr,                 nullptr }
 };
 

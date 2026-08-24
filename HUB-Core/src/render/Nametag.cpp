@@ -481,13 +481,24 @@ void Nametag::RenderAll(IDirect3DDevice9* device) {
 
     const sampapi::ID localId = playerPool->m_nLocalPlayerId;
     for (int playerId = 0; playerId < kMaxPlayers; ++playerId) {
-        if (playerId == localId || !playerPool->IsConnected(static_cast<sampapi::ID>(playerId))) continue;
+        sampapi::v03dl::CPed* ped = nullptr;
+        const char* name = nullptr;
 
-        CRemotePlayer* remote = playerPool->GetPlayer(static_cast<sampapi::ID>(playerId));
-        if (!remote || !remote->m_pPed || !remote->m_pPed->m_pGamePed) continue;
+        if (playerId == localId) {
+            ped = localPlayer->m_pPed;
+            name = playerPool->GetLocalPlayerName();
+        } else {
+            if (!playerPool->IsConnected(static_cast<sampapi::ID>(playerId))) continue;
+            CRemotePlayer* remote = playerPool->GetPlayer(static_cast<sampapi::ID>(playerId));
+            if (!remote) continue;
+            ped = remote->m_pPed;
+            name = playerPool->GetName(static_cast<sampapi::ID>(playerId));
+        }
+
+        if (!ped || !ped->m_pGamePed) continue;
 
         sampapi::CVector worldPosition{};
-        remote->m_pPed->GetBonePosition(8, &worldPosition);
+        ped->GetBonePosition(8, &worldPosition);
         worldPosition.z += kHeadOffsetZ;
 
         const float deltaX = worldPosition.x - localPosition.x;
@@ -504,11 +515,10 @@ void Nametag::RenderAll(IDirect3DDevice9* device) {
         }
 
         const float scale = (std::max)(0.55f, 1.0f - distance / drawDistance * 0.45f);
-        const char* name = playerPool->GetName(static_cast<sampapi::ID>(playerId));
         if (!name || name[0] == '\0') name = "Player";
 
         DrawPlayer(device, screenX, screenY, scale, name, playerId,
-            remote->m_pPed->GetHealth(), remote->m_pPed->GetArmour(), nametagSnapshot[playerId]);
+            ped->GetHealth(), ped->GetArmour(), nametagSnapshot[playerId]);
     }
 }
 
